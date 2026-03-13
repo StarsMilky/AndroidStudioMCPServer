@@ -1,0 +1,621 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Android Studio MCP Tools — 12 Tool Contracts",
+  "description": "MCP Tool input/output contracts for AI Agent code intelligence (registered via AbstractMcpTool extension point)",
+
+  "tools": [
+    {
+      "name": "resolve_symbol",
+      "description": "精确解析代码中任意位置的符号：返回全限定类型、声明位置、符号类别",
+      "maxReturnSize": "200B",
+      "inputSchema": {
+        "type": "object",
+        "required": ["file", "line", "column"],
+        "properties": {
+          "file": { "type": "string", "description": "文件路径（相对于项目根目录）" },
+          "line": { "type": "integer", "minimum": 1, "description": "1-based 行号" },
+          "column": { "type": "integer", "minimum": 1, "description": "1-based 列号" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "qualified_type": { "type": "string" },
+          "declaration_file": { "type": "string" },
+          "declaration_line": { "type": "integer" },
+          "kind": { "type": "string", "enum": ["class", "method", "field", "variable", "parameter", "property"] }
+        }
+      }
+    },
+    {
+      "name": "find_references",
+      "description": "语义级查找符号的引用/调用层级/类型层级（零误报，区分引用类型）",
+      "maxReturnSize": "3KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["file", "line", "column"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "mode": { "type": "string", "enum": ["usages", "call_hierarchy", "type_hierarchy"], "default": "usages" },
+          "scope": { "type": "string", "enum": ["project", "module", "file"], "default": "project" },
+          "depth": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
+          "offset": { "type": "integer", "minimum": 0, "default": 0 },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer" },
+          "usages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "line": { "type": "integer" },
+                "code": { "type": "string" },
+                "usage_type": { "type": "string", "enum": ["call", "override", "read", "write"] }
+              }
+            }
+          },
+          "call_hierarchy": {
+            "type": "object",
+            "properties": {
+              "method": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "children": { "type": "array", "items": { "$ref": "#/tools/1/outputSchema/properties/call_hierarchy" } }
+            }
+          },
+          "type_hierarchy": {
+            "type": "object",
+            "properties": {
+              "target": { "type": "string" },
+              "supers": { "type": "array", "items": { "type": "string" } },
+              "inheritors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "class_name": { "type": "string" },
+                    "file": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "get_scope",
+      "description": "获取指定代码位置的所有可用符号（局部变量、成员、扩展函数、导入符号）",
+      "maxReturnSize": "3.5KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["file", "line", "column"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "filter": { "type": "string", "enum": ["all", "variables", "methods", "types"], "default": "all" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "local_variables": { "type": "array", "items": { "$ref": "#/$defs/scope_symbol" } },
+          "this_members": { "type": "array", "items": { "$ref": "#/$defs/scope_symbol" } },
+          "extension_functions": { "type": "array", "items": { "$ref": "#/$defs/scope_symbol" } },
+          "imported_symbols": { "type": "array", "items": { "$ref": "#/$defs/scope_symbol" } },
+          "truncated": { "type": "boolean" }
+        }
+      }
+    },
+    {
+      "name": "refactor",
+      "description": "语义级安全重构（rename/move/extract/safe_delete/change_signature），跨 Java/Kotlin/XML/Manifest",
+      "maxReturnSize": "2KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["operation", "file"],
+        "properties": {
+          "operation": { "type": "string", "enum": ["rename", "move", "extract", "safe_delete", "change_signature"] },
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "new_name": { "type": "string", "description": "rename 操作的新名称" },
+          "target_package": { "type": "string", "description": "move 操作的目标包名" },
+          "start_line": { "type": "integer", "description": "extract 操作的起始行" },
+          "end_line": { "type": "integer", "description": "extract 操作的结束行" },
+          "method_name": { "type": "string", "description": "extract 操作的新方法名" },
+          "new_parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "default_value": { "type": "string" }
+              }
+            },
+            "description": "change_signature 的新参数列表"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "affected_files": { "type": "array", "items": { "type": "string" } },
+          "changes_count": { "type": "integer" },
+          "preview": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "change": { "type": "string" }
+              }
+            }
+          },
+          "conflicts": { "type": "array", "items": { "type": "string" } },
+          "checkpoint_label": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "analyze_data_flow",
+      "description": "数据流分析——空安全推理、值传播追踪、外部注解查询",
+      "maxReturnSize": "2KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["file", "line", "column"],
+        "properties": {
+          "file": { "type": "string" },
+          "line": { "type": "integer", "minimum": 1 },
+          "column": { "type": "integer", "minimum": 1 },
+          "mode": { "type": "string", "enum": ["nullability", "forward", "backward"], "default": "nullability" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "nullability": { "type": "string", "enum": ["definitely_not_null", "possibly_null", "definitely_null"] },
+          "reason": { "type": "string" },
+          "null_paths": { "type": "array", "items": { "type": "string" } },
+          "flow_paths": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "steps": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "file": { "type": "string" },
+                      "line": { "type": "integer" },
+                      "code": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "query_project",
+      "description": "项目全景图、依赖关系图、变更影响分析、API 表面分析、Build Variant 感知",
+      "maxReturnSize": "16KB (panorama) / 2KB (detail)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": { "type": "string", "enum": ["overview", "dependency", "api_surface", "variant"], "default": "overview" },
+          "target_class": { "type": "string", "description": "dependency 模式的目标类" },
+          "change_type": { "type": "string", "enum": ["signature_change", "behavior_change", "delete"] },
+          "max_hops": { "type": "integer", "minimum": 1, "maximum": 10, "default": 3 },
+          "module": { "type": "string", "description": "api_surface 模式的目标模块" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string" },
+                "depends_on": { "type": "array", "items": { "type": "string" } },
+                "stats": {
+                  "type": "object",
+                  "properties": {
+                    "classes": { "type": "integer" },
+                    "kotlin_files": { "type": "integer" },
+                    "java_files": { "type": "integer" }
+                  }
+                }
+              }
+            }
+          },
+          "architecture_pattern": { "type": "string" },
+          "entry_points": { "type": "array", "items": { "type": "string" } },
+          "dependency_direction": { "type": "string" },
+          "cycles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": { "type": "array", "items": { "type": "string" } },
+                "severity": { "type": "string" }
+              }
+            }
+          },
+          "impact": {
+            "type": "object",
+            "properties": {
+              "direct_impact": { "type": "array", "items": { "type": "string" } },
+              "transitive_impact": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } } },
+              "affected_modules": { "type": "array", "items": { "type": "string" } },
+              "affected_tests": { "type": "array", "items": { "type": "string" } },
+              "risk_level": { "type": "string" },
+              "suggestion": { "type": "string" }
+            }
+          },
+          "coupling_metrics": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "afferent": { "type": "integer" },
+                "efferent": { "type": "integer" },
+                "instability": { "type": "number" }
+              }
+            }
+          },
+          "public_api": {
+            "type": "object",
+            "properties": {
+              "classes": { "type": "array", "items": { "type": "object" } },
+              "total_public_symbols": { "type": "integer" }
+            }
+          },
+          "leaky_abstractions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "issue": { "type": "string" },
+                "file": { "type": "string" },
+                "suggestion": { "type": "string" }
+              }
+            }
+          },
+          "variant": {
+            "type": "object",
+            "properties": {
+              "variant": { "type": "string" },
+              "build_type": { "type": "string" },
+              "flavors": { "type": "array", "items": { "type": "string" } },
+              "active_source_dirs": { "type": "array", "items": { "type": "string" } },
+              "inactive_source_dirs": { "type": "array", "items": { "type": "string" } },
+              "build_config_fields": { "type": "object", "additionalProperties": { "type": "string" } }
+            }
+          },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "query_framework",
+      "description": "基于注解扫描生成 Room/Retrofit/Hilt/Compose/Navigation 的结构化框架视图",
+      "maxReturnSize": "1.5KB (list) / 1KB (detail)",
+      "inputSchema": {
+        "type": "object",
+        "required": ["framework"],
+        "properties": {
+          "framework": { "type": "string", "enum": ["room", "retrofit", "hilt", "compose", "navigation"] },
+          "detail_target": { "type": "string", "description": "null=列表模式, 非null=详情模式" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "framework": { "type": "string" },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "total_components": { "type": "integer" },
+              "detail_target": { "type": "string" }
+            }
+          },
+          "room": { "$ref": "#/$defs/room_view" },
+          "retrofit": { "$ref": "#/$defs/retrofit_view" },
+          "hilt": { "$ref": "#/$defs/hilt_view" },
+          "compose": { "$ref": "#/$defs/compose_view" },
+          "navigation": { "$ref": "#/$defs/navigation_view" },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "analyze_quality",
+      "description": "代码质量分析——复杂度热点、死代码、代码克隆、设计模式/反模式、异常处理",
+      "maxReturnSize": "3KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["mode"],
+        "properties": {
+          "mode": { "type": "string", "enum": ["complexity", "dead_code", "clones", "patterns", "error_handling"] },
+          "scope": { "type": "string", "enum": ["project", "module"], "default": "project" },
+          "target": { "type": "string", "description": "scope=module 时的模块名" },
+          "top_n": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "mode": { "type": "string" },
+          "issues": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": { "type": "string" },
+                "severity": { "type": "string", "enum": ["critical", "warning", "info"] },
+                "file": { "type": "string" },
+                "line": { "type": "integer" },
+                "description": { "type": "string" },
+                "suggestion": { "type": "string" },
+                "metrics": { "type": "object", "additionalProperties": { "type": "string" } }
+              }
+            }
+          },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "check_rules",
+      "description": "验证代码是否遵守自定义架构规则（层级违规、非法依赖）",
+      "maxReturnSize": "3KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["rules"],
+        "properties": {
+          "rules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "source", "must_not_depend_on"],
+              "properties": {
+                "name": { "type": "string" },
+                "source": { "type": "string", "description": "源包 glob 模式" },
+                "must_not_depend_on": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "passed": { "type": "integer" },
+          "failed": { "type": "integer" },
+          "violations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": { "type": "string" },
+                "violator": { "type": "string" },
+                "illegal_dependency": { "type": "string" },
+                "file": { "type": "string" },
+                "line": { "type": "integer" },
+                "suggestion": { "type": "string" }
+              }
+            }
+          },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "structural_search",
+      "description": "基于 AST 的代码模式搜索（IntelliJ SSR 语法），超越文本搜索",
+      "maxReturnSize": "3KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["pattern"],
+        "properties": {
+          "pattern": { "type": "string", "description": "SSR 搜索模板" },
+          "file_type": { "type": "string", "enum": ["kotlin", "java", "xml"], "default": "kotlin" },
+          "scope": { "type": "string", "enum": ["project", "module", "directory"], "default": "project" },
+          "type_constraint": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer" },
+          "matches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "line": { "type": "integer" },
+                "matched_code": { "type": "string" }
+              }
+            }
+          },
+          "truncated": { "type": "boolean" },
+          "hint": { "type": "string" }
+        }
+      }
+    },
+    {
+      "name": "checkpoint",
+      "description": "Local History 操作——创建检查点、查看历史、回滚、对比差异",
+      "maxReturnSize": "4KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["operation"],
+        "properties": {
+          "operation": { "type": "string", "enum": ["create", "history", "rollback", "diff"] },
+          "label": { "type": "string", "description": "检查点名称" },
+          "file": { "type": "string", "description": "history/diff 的文件路径" },
+          "target_label": { "type": "string", "description": "diff 的对比目标检查点" }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "timestamp": { "type": "string" },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "timestamp": { "type": "string" },
+                "label": { "type": "string" },
+                "size_delta": { "type": "string" }
+              }
+            }
+          },
+          "diff": { "type": "string" },
+          "restored_files": { "type": "integer" }
+        }
+      }
+    },
+    {
+      "name": "sandbox",
+      "description": "安全沙盒——运行临时代码、反编译、渲染布局、Java→Kotlin 转换、批量修复",
+      "maxReturnSize": "4KB",
+      "inputSchema": {
+        "type": "object",
+        "required": ["operation"],
+        "properties": {
+          "operation": { "type": "string", "enum": ["scratch", "decompile", "render", "convert_j2k", "batch_fix"] },
+          "language": { "type": "string", "enum": ["kotlin", "java"] },
+          "code": { "type": "string", "description": "scratch 模式的代码" },
+          "module_context": { "type": "string", "default": "app" },
+          "timeout": { "type": "integer", "minimum": 1, "maximum": 120, "default": 30 },
+          "qualified_class_name": { "type": "string", "description": "decompile 模式的类名" },
+          "layout_file": { "type": "string", "description": "render 模式的布局文件" },
+          "device_config": {
+            "type": "object",
+            "properties": {
+              "screen_width_dp": { "type": "integer", "default": 360 },
+              "screen_height_dp": { "type": "integer", "default": 640 },
+              "density": { "type": "string", "default": "xxhdpi" },
+              "night_mode": { "type": "boolean", "default": false },
+              "locale": { "type": "string", "default": "en" },
+              "api_level": { "type": "integer", "default": 34 }
+            }
+          },
+          "java_file": { "type": "string", "description": "convert_j2k 模式的 Java 文件" },
+          "inspection_scope": { "type": "string" },
+          "inspection_ids": { "type": "array", "items": { "type": "string" } },
+          "dry_run": { "type": "boolean", "default": true }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "stdout": { "type": "string" },
+          "stderr": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "compile_errors": { "type": "array", "items": { "type": "string" } },
+          "source_code": { "type": "string" },
+          "artifact": { "type": "string" },
+          "jar_path": { "type": "string" },
+          "image_base64": { "type": "string" },
+          "render_warnings": { "type": "array", "items": { "type": "string" } },
+          "kotlin_code": { "type": "string" },
+          "warnings": { "type": "array", "items": { "type": "string" } },
+          "problems_found": { "type": "integer" },
+          "problems_fixed": { "type": "integer" },
+          "unfixable": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "line": { "type": "integer" },
+                "reason": { "type": "string" }
+              }
+            }
+          },
+          "timed_out": { "type": "boolean" },
+          "checkpoint_label": { "type": "string" }
+        }
+      }
+    }
+  ],
+
+  "$defs": {
+    "scope_symbol": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "kind": { "type": "string", "enum": ["variable", "method", "property", "type"] }
+      }
+    },
+    "room_view": {
+      "type": "object",
+      "properties": {
+        "databases": { "type": "array", "items": { "type": "object" } },
+        "entities": { "type": "array", "items": { "type": "object" } },
+        "daos": { "type": "array", "items": { "type": "object" } },
+        "migrations": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "retrofit_view": {
+      "type": "object",
+      "properties": {
+        "interfaces": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "hilt_view": {
+      "type": "object",
+      "properties": {
+        "modules": { "type": "array", "items": { "type": "object" } },
+        "components": { "type": "array", "items": { "type": "object" } },
+        "entry_points": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "compose_view": {
+      "type": "object",
+      "properties": {
+        "composables": { "type": "array", "items": { "type": "object" } },
+        "themes": { "type": "array", "items": { "type": "object" } },
+        "state_holders": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "navigation_view": {
+      "type": "object",
+      "properties": {
+        "graphs": { "type": "array", "items": { "type": "object" } },
+        "destinations": { "type": "array", "items": { "type": "object" } },
+        "deep_links": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}
