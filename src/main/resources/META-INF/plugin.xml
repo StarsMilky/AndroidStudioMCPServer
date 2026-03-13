@@ -23,9 +23,25 @@
     <depends>com.intellij.java</depends>
     <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.modules.json</depends>
-    <!-- Extensions defined by the plugin.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
+    <depends>com.intellij.mcpServer</depends>
+
     <extensions defaultExtensionNs="com.intellij">
+        <!-- P0 MVP Tools -->
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.ResolveSymbolTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.FindReferencesTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.GetScopeTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.CheckpointTool"/>
+        <!-- P1 Tools -->
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.RefactorTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.QueryProjectTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.QueryFrameworkTool"/>
+        <!-- P2 Tools -->
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.AnalyzeDataFlowTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.CheckRulesTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.StructuralSearchTool"/>
+        <!-- P3 Tools -->
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.AnalyzeQualityTool"/>
+        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.SandboxTool"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
