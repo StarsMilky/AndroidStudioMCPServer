@@ -125,7 +125,7 @@ object ClientAutoConfigurator {
         val title = if (result.success) "MCP 客户端已配置" else "MCP 客户端配置失败"
 
         val notification = NotificationGroupManager.getInstance()
-            .getNotificationGroup("MCP PSI Tools")
+            .getNotificationGroup("MCP Code Intelligence")
             .createNotification(title, result.message, type)
 
         if (result.success) {

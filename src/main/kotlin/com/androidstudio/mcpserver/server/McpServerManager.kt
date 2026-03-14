@@ -85,7 +85,7 @@ class McpServerManager : Disposable {
         try {
             val server = Server(
                 serverInfo = Implementation(
-                    name = "android-studio-psi-tools",
+                    name = "android-studio-code-intelligence",
                     version = "1.0.0"
                 ),
                 options = ServerOptions(
@@ -112,7 +112,7 @@ class McpServerManager : Disposable {
 
             writePortFile(selectedPort)
             setState(ServerState.RUNNING)
-            log.info("MCP PSI Server started on http://127.0.0.1:$selectedPort/mcp")
+            log.info("MCP Code Intelligence Server started on http://127.0.0.1:$selectedPort/mcp")
         } catch (e: Exception) {
             errorMessage = e.message
             setState(ServerState.ERROR)
@@ -129,7 +129,7 @@ class McpServerManager : Disposable {
             mcpServer = null
             deletePortFile()
             setState(ServerState.STOPPED)
-            log.info("MCP PSI Server stopped")
+            log.info("MCP Code Intelligence Server stopped")
         } catch (e: Exception) {
             log.error("Error stopping MCP Server", e)
         }
@@ -178,9 +178,9 @@ class McpServerManager : Disposable {
 
     companion object {
         const val DEFAULT_PORT = 17532
-        const val PORT_FILE_NAME = ".android-studio-mcp-psi.json"
+        const val PORT_FILE_NAME = ".android-studio-mcp-code-intel.json"
         const val MAX_PORT_ATTEMPTS = 10
-        const val MCP_SERVER_ENTRY_NAME = "android-studio-psi"
+        const val MCP_SERVER_ENTRY_NAME = "android-studio-code-intel"
 
         fun getInstance(): McpServerManager =
             ApplicationManager.getApplication().getService(McpServerManager::class.java)

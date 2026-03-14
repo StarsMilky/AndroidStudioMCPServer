@@ -1,149 +1,247 @@
 ---
 name: android-studio-mcp
-description: Enforces using Android Studio MCP tools for code analysis, refactoring, and project understanding instead of CLI commands. Provides a decision tree mapping developer intents to the correct MCP tool. Triggers when working on Android/Kotlin/Java projects with the android-studio-mcp server connected.
+description: >
+  Use when working on Android/Kotlin/Java projects with the android-studio-mcp
+  (or android-studio-code-intel) MCP server connected. Triggers on: any code
+  analysis, refactoring, symbol lookup, reference search, project overview,
+  framework query (Room/Retrofit/Hilt/Compose/Navigation), data flow analysis,
+  quality check, structural search, checkpoint management, decompile, J2K
+  conversion, batch-fix. NEVER use grep/rg for code references, NEVER use
+  sed/text-replace for renaming, NEVER guess types. Do NOT use for PDF, image,
+  or non-JVM language tasks.
 always-apply: false
 ---
 
-# Android Studio MCP Tools — Usage Guide
+# Android Studio MCP — Code Intelligence
 
-When the `android-studio-mcp` server is connected, you have access to 12 IDE-powered tools that provide capabilities impossible via CLI. **Always prefer these tools over CLI equivalents.**
+12 IDE-level tools for AI agents. **Always prefer these over CLI equivalents.**
+
+## Quick Reference
+
+| Task | Tool Call |
+|------|-----------|
+| What type is this? | `resolve_symbol(file, line, column)` |
+| Who uses this symbol? | `find_references(file, line, col, mode="USAGES")` |
+| Who calls this method? | `find_references(file, line, col, mode="CALLERS", depth=3)` |
+| What does this method call? | `find_references(file, line, col, mode="CALLEES")` |
+| Class hierarchy | `find_references(file, line, col, mode="TYPE_HIERARCHY")` |
+| Symbols at cursor | `get_scope(file, line, col, filter="ALL")` |
+| Project overview | `query_project(mode="OVERVIEW")` |
+| Dependency impact | `query_project(mode="DEPENDENCY", target_class="com.Foo")` |
+| Framework details | `query_framework(framework="ROOM", detail_target="UserEntity")` |
+| Null safety check | `analyze_data_flow(file, line, col, mode="NULLABILITY")` |
+| Value tracing | `analyze_data_flow(file, line, col, mode="BACKWARD")` |
+| Quality hotspots | `analyze_quality(mode="COMPLEXITY", top_n=10)` |
+| Architecture rules | `check_rules(rules=[...])` |
+| Pattern search | `structural_search(pattern="@Composable fun $X$")` |
+| Rename safely | `refactor(operation="RENAME", file, line, col, new_name="New")` |
+| Create checkpoint | `checkpoint(operation="CREATE", label="before-fix")` |
+| Decompile class | `sandbox(operation="DECOMPILE", qualified_class_name="...")` |
 
 ## Critical Rules
 
-1. **NEVER** use `grep`/`rg` to find code references → use `find_references`
-2. **NEVER** guess a variable's type by reading code → use `resolve_symbol`
-3. **NEVER** use `sed`/text replace for renaming → use `refactor(action="rename")`
-4. **NEVER** manually search for all subclasses/implementations → use `find_references(kind="inheritors")`
-5. **NEVER** start modifying code without first calling `checkpoint(action="create")`
-6. **ALWAYS** call `query_project(mode="panorama")` as your first action on a new project
-7. **ALWAYS** call `resolve_symbol` when unsure about a type — do not guess
+1. **NEVER** use `grep`/`rg` for code references → `find_references(mode="USAGES")`
+2. **NEVER** guess types → `resolve_symbol`
+3. **NEVER** use `sed`/text-replace for renaming → `refactor(operation="RENAME")`
+4. **NEVER** start multi-file changes without → `checkpoint(operation="CREATE")`
+5. **ALWAYS** start with `query_project(mode="OVERVIEW")` on a new project
+6. **ALWAYS** use `resolve_symbol` when unsure about a type
+7. All enum values are **UPPERCASE**: `"USAGES"`, `"RENAME"`, `"OVERVIEW"`, not `"usages"`
 
-## Decision Tree
+## Workflows
 
-### "I need to understand this project"
-
-```
-First time seeing this project?
-  → query_project(mode="panorama")      # complete architecture map
-
-Need framework details (DB tables, API endpoints, DI graph)?
-  → query_framework(framework, detail)
-
-Need to know what code quality issues exist?
-  → analyze_quality(scope, top_n=10)
-
-Need to check architecture rule violations?
-  → check_rules(rules)
-```
-
-### "I need to understand this code"
+### Workflow 1: Investigate a Bug
 
 ```
-What type is this variable/expression?
-  → resolve_symbol(file, line, column)
+1. resolve_symbol(file, line, col)
+   → Learn the exact type, qualified name, declaration location
+   → Use the qualified name to understand what you're dealing with
 
-Who uses this class/method/field?
-  → find_references(kind="usages")
+2. find_references(mode="CALLERS", depth=2)
+   → Trace all callers to understand how the buggy code is reached
+   → Output includes file, line, snippet for each caller
 
-Who calls this method? (with depth)
-  → find_references(kind="callers", depth=N)
+3. analyze_data_flow(mode="NULLABILITY")
+   → Check if the bug is a null safety issue
+   → Output shows nullable/non-null status and the inference chain
 
-What classes implement this interface?
-  → find_references(kind="inheritors")
+4. analyze_data_flow(mode="BACKWARD")
+   → Trace where the problematic value originates
 
-What's the parent class chain?
-  → find_references(kind="supers")
+5. checkpoint(operation="CREATE", label="before-bugfix")
+   → Save state before making changes
 
-What symbols can I use at this code location?
-  → get_scope(file, line, column)
+6. [Fix the bug]
 
-Can this variable be null here?
-  → analyze_data_flow(query="nullability")
-
-Where does this value come from?
-  → analyze_data_flow(query="value_sources", direction="backward")
+7. find_references(mode="USAGES") on changed symbols
+   → Verify no other code is broken by the fix
 ```
 
-### "I need to modify code"
+### Workflow 2: Add a New Feature
 
 ```
-Before ANY multi-file change:
-  → checkpoint(action="create", label="before-<description>")
+1. query_project(mode="OVERVIEW")
+   → Get project architecture: modules, key classes, frameworks
+   → Response adapts to project size: full class map for small, module digest for large
 
-Rename a symbol (class/method/field/variable):
-  → refactor(action="rename")            # NOT sed/text-replace
+2. query_framework(framework="HILT")
+   → Understand DI setup: modules, bindings, scoped components
+   → Use detail_target="ModuleName" for deeper inspection
 
-Move a class to another package:
-  → refactor(action="move")
+3. find_references(mode="TYPE_HIERARCHY") on related base classes
+   → Discover existing implementations to follow the same pattern
 
-Extract a code block into a method:
-  → refactor(action="extract_method")
+4. get_scope(file, line, col)
+   → See what's available at the insertion point: variables, methods, types
 
-Delete a class/method safely:
-  → refactor(action="safe_delete")       # checks for references first
+5. checkpoint(operation="CREATE", label="before-feature-xyz")
 
-Change a method's parameter list:
-  → refactor(action="change_signature")
+6. [Implement feature]
 
-Something went wrong, need to undo:
-  → checkpoint(action="rollback", label="before-<description>")
+7. refactor(operation="RENAME/MOVE") if needed
+   → IDE handles all cross-file updates automatically
+
+8. checkpoint(operation="DIFF", file="...", target_label="before-feature-xyz")
+   → Review all changes made
 ```
 
-### "I need to find code patterns"
+### Workflow 3: Code Review / Quality Audit
 
 ```
-Find specific AST pattern (e.g. "all Thread().start() calls"):
-  → structural_search(pattern, scope)
+1. analyze_quality(mode="COMPLEXITY", top_n=10)
+   → Find the most complex methods (cyclomatic complexity hotspots)
 
-Find all classes with a specific annotation:
-  → structural_search(pattern="@Entity class $C$")
+2. analyze_quality(mode="DEAD_CODE")
+   → Find unused classes, methods, fields
+
+3. check_rules(rules=[
+     {name: "UI must not access DB", source: "com.app.ui", must_not_depend_on: ["com.app.db"]},
+     {name: "No Android in domain", source: "com.app.domain", must_not_depend_on: ["android."]}
+   ])
+   → Verify architecture boundaries
+
+4. structural_search(pattern="Thread().start()", file_type="kotlin")
+   → Find anti-patterns across codebase
+
+5. analyze_quality(mode="ERROR_HANDLING")
+   → Find empty catch blocks, swallowed exceptions
 ```
 
-### "I need to run/test/convert something"
+### Workflow 4: Understand Unfamiliar Codebase
 
 ```
-Run a code snippet to verify behavior:
-  → sandbox(action="run_code", code, language)
+1. query_project(mode="OVERVIEW")
+   → Get modules, class hierarchy, framework summary, key hub classes
 
-See a library class's source code:
-  → sandbox(action="decompile", qualified_class_name)
+2. query_project(mode="API_SURFACE", module="app")
+   → See public API of a specific module
 
-Convert Java file to Kotlin:
-  → sandbox(action="convert_j2k", file)
+3. query_framework(framework="COMPOSE")
+   → Map all Composable functions and navigation routes
 
-Preview an XML layout without device:
-  → sandbox(action="render_layout", layout_file)
+4. query_framework(framework="ROOM")
+   → Map all DB entities, DAOs, queries
 
-Batch-apply IDE quick fixes:
-  → sandbox(action="batch_fix", scope, inspection_ids)
+5. structural_search(pattern="class $X$ : ViewModel", file_type="kotlin")
+   → Find all ViewModels to understand app screens
+
+6. For any symbol you encounter:
+   resolve_symbol → find_references(mode="USAGES") → find_references(mode="CALLERS")
 ```
 
-## Tool Reference (12 tools)
+## Tool Details
 
-| Tool | Purpose | Key params |
-|------|---------|-----------|
-| `resolve_symbol` | Get exact type at a code position | file, line, column |
-| `find_references` | Find usages/callers/callees/inheritors/supers | file, line, col, kind, depth, limit |
-| `get_scope` | List available symbols at a position | file, line, col, filter |
-| `refactor` | Safe rename/move/extract/delete/change-signature | action, file, line, col, params |
-| `analyze_data_flow` | Nullability check, value source/consumer tracing | file, line, col, query, max_steps |
-| `query_project` | Project architecture (auto-adapts to project size) | mode: "panorama" or "detail" |
-| `query_framework` | Framework-specific views (Room/Retrofit/Hilt/Compose) | framework, detail |
-| `analyze_quality` | Top N code quality issues | scope, aspects, top_n |
-| `check_rules` | Validate architecture rules | rules[] |
-| `structural_search` | AST pattern matching | pattern, scope, limit |
-| `checkpoint` | Local History: create/rollback/diff/history | action, label |
-| `sandbox` | Run code / decompile / render / convert / batch-fix | action, params |
+### resolve_symbol
+Returns: `name`, `qualified_name`, `kind` (CLASS/METHOD/FIELD/VARIABLE/PARAMETER/PROPERTY/PACKAGE/OBJECT/ENUM_ENTRY), `type`, `file`, `line`, `documentation`
 
-## Workflow Template
+### find_references
+- `mode="USAGES"` → all references to the symbol (with file, line, snippet, reference type)
+- `mode="CALLERS"` → methods that call this method (with call chain up to `depth` levels)
+- `mode="CALLEES"` → methods called inside this method body
+- `mode="TYPE_HIERARCHY"` → subtypes and supertypes of this class/interface
+- Pagination: `offset` and `limit` for large result sets
 
-For any non-trivial task, follow this sequence:
+### get_scope
+- `filter="ALL"` → everything visible at this position
+- `filter="VARIABLES"` → local vars, parameters, fields
+- `filter="METHODS"` → callable methods (including extensions)
+- `filter="TYPES"` → visible classes, interfaces, type aliases
+
+### query_project
+- `mode="OVERVIEW"` → adaptive: returns full class map for small projects, module-level digest for large ones. Includes `frameworks` summary and `key_classes` (hub classes with most references)
+- `mode="DEPENDENCY"` → transitive impact analysis: given `target_class` and `change_type` (SIGNATURE_CHANGE/BEHAVIOR_CHANGE/DELETE), traces affected classes up to `max_hops`
+- `mode="API_SURFACE"` → public classes, methods, fields of a module
+- `mode="VARIANT"` → build variants and flavors
+
+### query_framework
+Supports: `ROOM` (entities, DAOs, queries), `RETROFIT` (interfaces, endpoints), `HILT` (modules, bindings, components), `COMPOSE` (composables, navigation), `NAVIGATION` (nav graph, destinations)
+
+Use `detail_target` to drill into a specific entity/interface by name.
+
+### analyze_data_flow
+- `mode="NULLABILITY"` → null safety analysis at the given position
+- `mode="FORWARD"` → trace where a value flows to (consumers)
+- `mode="BACKWARD"` → trace where a value comes from (sources)
+- `mode="EXTERNAL_ANNOTATIONS"` → query @Nullable/@NonNull annotations on library APIs
+
+### refactor
+All operations are **real refactorings** — they update all references across Java/Kotlin/XML/Manifest:
+- `RENAME` → requires `new_name`
+- `MOVE` → requires `target_package`
+- `EXTRACT` → requires `start_line`, `end_line`, `method_name`
+- `SAFE_DELETE` → checks for references before deleting
+- `CHANGE_SIGNATURE` → `new_parameters[]` and/or `new_return_type`
+
+### checkpoint
+- `CREATE` → takes a snapshot of all open files. **Always do this before multi-file changes**
+- `HISTORY` → lists all checkpoint labels (optionally filtered by `file`)
+- `ROLLBACK` → restores files to a labeled checkpoint state
+- `DIFF` → shows what changed between now and a checkpoint label
+
+### structural_search
+Uses IntelliJ SSR engine for Kotlin/Java (supports full template variables, type constraints). XML uses tag-name matching.
+- Patterns: `class $X$ : Base`, `@Anno fun $X$`, `$T$.start()`, `synchronized ($lock$) { $stmt$; }`
+- `file_type`: `kotlin`, `java`, `xml`, `all`
+- `scope`: `project` (default) or `module:ModuleName`
+
+### analyze_quality
+Modes: `COMPLEXITY` (cyclomatic), `DEAD_CODE`, `CLONES`, `PATTERNS`, `ERROR_HANDLING`
+- `scope`: `project` or `module:ModuleName`
+- `target`: specific class/package to narrow analysis
+- `top_n`: limit results (default 10)
+
+### sandbox
+- `DECOMPILE` → view source of compiled/library classes
+- `CONVERT_J2K` → Java to Kotlin conversion
+- `BATCH_FIX` → apply IDE inspections (e.g., `["UnusedImport", "RedundantVisibilityModifier"]`). Use `dry_run=true` first!
+
+## Tool Chaining Patterns
 
 ```
-1. query_project(mode="panorama")        — understand the battlefield
-2. resolve_symbol / find_references      — understand the specific area
-3. checkpoint(action="create")           — save before changes
-4. [make changes using refactor or direct edits]
-5. find_references on changed symbols    — verify no breakage
-6. checkpoint(action="diff") if needed   — review what you changed
+resolve_symbol → find_references
+  "I found this is a DAO method. Now show me all callers."
+
+query_project → query_framework → structural_search
+  "Project uses Room. Let me find all entities, then search for raw SQL queries."
+
+find_references(CALLERS) → analyze_data_flow(NULLABILITY)
+  "This method is called from 5 places. Let me check if any pass null."
+
+checkpoint(CREATE) → refactor(RENAME) → find_references(USAGES) → checkpoint(DIFF)
+  "Save state, rename, verify nothing broke, review changes."
 ```
+
+## Scope Parameter
+
+Many tools accept a `scope` parameter:
+- `"project"` → search/analyze the entire project (default)
+- `"module:app"` → limit to the `app` module only
+- Use module scope for faster results on large projects
+
+## Limitations
+
+- Tools operate on the **currently open project** in Android Studio
+- `refactor` modifies the in-memory PSI model; files need IDE save to persist to disk
+- `checkpoint ROLLBACK` restores from plugin snapshots, not full IDE Local History
+- `structural_search` for XML uses tag-name matching (SSR engine handles Kotlin/Java)
+- `sandbox CONVERT_J2K` is a basic structural converter, not the full J2K engine

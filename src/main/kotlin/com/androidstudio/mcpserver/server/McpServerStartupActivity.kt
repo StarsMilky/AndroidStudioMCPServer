@@ -9,7 +9,7 @@ class McpServerStartupActivity : ProjectActivity {
     private val log = Logger.getInstance(McpServerStartupActivity::class.java)
 
     override suspend fun execute(project: Project) {
-        log.info("Project opened: ${project.name}, starting MCP PSI Server...")
+        log.info("Project opened: ${project.name}, starting MCP Code Intelligence Server...")
         McpServerManager.getInstance().startIfNeeded(project)
     }
 }
