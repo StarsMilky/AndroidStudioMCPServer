@@ -15,11 +15,12 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
+import com.intellij.lang.Language
 import com.intellij.structuralsearch.MatchOptions
-import com.intellij.structuralsearch.MatchResult
 import com.intellij.structuralsearch.Matcher
 import com.intellij.structuralsearch.plugin.util.CollectingMatchResultSink
 import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.KotlinLanguage
 
 object StructuralSearcher {
 
@@ -47,24 +48,62 @@ object StructuralSearcher {
         args: StructuralSearchArgs,
         scope: GlobalSearchScope
     ): SearchMatchResult {
-        val options = MatchOptions()
-        options.searchPattern = args.pattern
-        options.scope = scope
-        options.isRecursiveSearch = true
+        val matches = mutableListOf<SearchMatch>()
 
-        when (args.fileType.lowercase()) {
-            "kotlin", "kt" -> options.setFileType(KotlinFileType.INSTANCE)
-            "java" -> options.setFileType(JavaFileType.INSTANCE)
-            "all" -> options.setFileType(JavaFileType.INSTANCE)
-            else -> options.setFileType(KotlinFileType.INSTANCE)
+        val fileTypes = when (args.fileType.lowercase()) {
+            "kotlin", "kt" -> listOf(KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE)
+            "java" -> listOf(JavaFileType.INSTANCE to com.intellij.lang.java.JavaLanguage.INSTANCE)
+            "all" -> listOf(
+                KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE,
+                JavaFileType.INSTANCE to com.intellij.lang.java.JavaLanguage.INSTANCE,
+            )
+            else -> listOf(KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE)
         }
 
+        for ((fileType, language) in fileTypes) {
+            if (matches.size >= args.limit) break
+            val partialMatches = runSsrForLanguage(project, args.pattern, scope, fileType, language, args.limit - matches.size)
+            matches.addAll(partialMatches)
+        }
+
+        if (args.fileType.lowercase() == "all") {
+            val xmlMatches = searchXmlFallback(project, args, scope).matches
+            matches.addAll(xmlMatches)
+        }
+
+        return SearchMatchResult(total = matches.size, matches = matches.take(args.limit))
+    }
+
+    private fun runSsrForLanguage(
+        project: Project,
+        pattern: String,
+        scope: GlobalSearchScope,
+        fileType: com.intellij.openapi.fileTypes.LanguageFileType,
+        language: Language,
+        limit: Int
+    ): List<SearchMatch> {
+        val options = MatchOptions()
+        options.searchPattern = pattern
+        options.scope = scope
+        options.isRecursiveSearch = true
+        options.setFileType(fileType)
+        options.setDialect(language)
+
+        log.info("SSR search: pattern='$pattern', fileType=${fileType.name}, dialect=${language.id}")
+
         val sink = CollectingMatchResultSink()
-        Matcher(project, options).findMatches(sink)
+        try {
+            Matcher(project, options).findMatches(sink)
+        } catch (e: Exception) {
+            log.warn("SSR Matcher.findMatches failed: ${e.message}", e)
+            return emptyList()
+        }
+
+        log.info("SSR results: ${sink.matches.size} matches found")
 
         val matches = mutableListOf<SearchMatch>()
         for (result in sink.matches) {
-            if (matches.size >= args.limit) break
+            if (matches.size >= limit) break
             val matchedElement = result.match ?: continue
             val file = matchedElement.containingFile ?: continue
             val vf = file.virtualFile ?: continue
@@ -74,39 +113,7 @@ object StructuralSearcher {
             val code = matchedElement.text.lines().firstOrNull()?.take(120) ?: ""
             matches.add(SearchMatch(file = relPath, line = line, matchedCode = code))
         }
-
-        if (args.fileType.lowercase() == "all") {
-            val kotlinMatches = try {
-                val ktOptions = MatchOptions()
-                ktOptions.searchPattern = args.pattern
-                ktOptions.scope = scope
-                ktOptions.isRecursiveSearch = true
-                ktOptions.setFileType(KotlinFileType.INSTANCE)
-
-                val ktSink = CollectingMatchResultSink()
-                Matcher(project, ktOptions).findMatches(ktSink)
-
-                ktSink.matches.mapNotNull { result ->
-                    if (matches.size >= args.limit) return@mapNotNull null
-                    val el = result.match ?: return@mapNotNull null
-                    val f = el.containingFile ?: return@mapNotNull null
-                    val vf = f.virtualFile ?: return@mapNotNull null
-                    val doc = PsiDocumentManager.getInstance(project).getDocument(f) ?: return@mapNotNull null
-                    val line = doc.getLineNumber(el.textOffset) + 1
-                    SearchMatch(
-                        file = ProjectUtils.toRelativePath(project, vf),
-                        line = line,
-                        matchedCode = el.text.lines().firstOrNull()?.take(120) ?: ""
-                    )
-                }
-            } catch (_: Exception) { emptyList() }
-
-            val xmlMatches = searchXmlFallback(project, args, scope).matches
-            matches.addAll(kotlinMatches)
-            matches.addAll(xmlMatches)
-        }
-
-        return SearchMatchResult(total = matches.size, matches = matches.take(args.limit))
+        return matches
     }
 
     // Fallback: custom pattern matcher for when SSR is unavailable
