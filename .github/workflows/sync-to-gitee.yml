@@ -4,16 +4,25 @@ on:
   push:
     branches: ['**']
     tags: ['**']
-  delete:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Mirror to Gitee
-        uses: wearerequired/git-mirror-action@v1
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.GITEE_SSH_PRIVATE_KEY }}
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          source-repo: git@github.com:StarsMilky/AndroidStudioMCPServer.git
-          destination-repo: git@gitee.com:star_star_s/android-studio-mcpserver.git
+          fetch-depth: 0
+
+      - name: Setup SSH for Gitee
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.GITEE_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -t ed25519 gitee.com >> ~/.ssh/known_hosts
+
+      - name: Push to Gitee
+        run: |
+          git remote add gitee git@gitee.com:star_star_s/android-studio-mcpserver.git
+          git push gitee --all --force
+          git push gitee --tags --force
