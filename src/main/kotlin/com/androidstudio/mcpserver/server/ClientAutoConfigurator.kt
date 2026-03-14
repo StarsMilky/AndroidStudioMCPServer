@@ -13,19 +13,63 @@ import java.nio.file.Path
 object ClientAutoConfigurator {
 
     private val log = Logger.getInstance(ClientAutoConfigurator::class.java)
+    private val prettyJson = Json { prettyPrint = true }
 
     data class ConfigResult(val success: Boolean, val filePath: String, val message: String)
 
+    data class CursorConfigStatus(
+        val configured: Boolean,
+        val configFilePath: String,
+        val configuredUrl: String? = null
+    )
+
+    private fun getCursorConfigFile(): File =
+        Path.of(System.getProperty("user.home"), ".cursor", "mcp.json").toFile()
+
+    fun isCursorConfigured(): CursorConfigStatus {
+        val configFile = getCursorConfigFile()
+        val serverUrl = McpServerManager.getInstance().getUrl()
+        val entryName = McpServerManager.MCP_SERVER_ENTRY_NAME
+
+        if (!configFile.exists() || configFile.length() == 0L) {
+            return CursorConfigStatus(false, configFile.absolutePath)
+        }
+
+        return try {
+            val json = Json.parseToJsonElement(configFile.readText()).jsonObject
+            val servers = json["mcpServers"]?.jsonObject ?: return CursorConfigStatus(false, configFile.absolutePath)
+            val entry = servers[entryName]?.jsonObject ?: return CursorConfigStatus(false, configFile.absolutePath)
+            val url = entry["url"]?.jsonPrimitive?.content
+
+            if (url == serverUrl) {
+                CursorConfigStatus(true, configFile.absolutePath, url)
+            } else if (url != null) {
+                CursorConfigStatus(true, configFile.absolutePath, url)
+            } else {
+                CursorConfigStatus(false, configFile.absolutePath)
+            }
+        } catch (e: Exception) {
+            log.warn("Failed to check Cursor config", e)
+            CursorConfigStatus(false, configFile.absolutePath)
+        }
+    }
+
     fun configureCursor(): ConfigResult {
-        val configFile = Path.of(System.getProperty("user.home"), ".cursor", "mcp.json").toFile()
+        val configFile = getCursorConfigFile()
         return writeServerEntry(configFile, "Cursor")
     }
 
-    fun configureClaude(): ConfigResult {
-        val appData = System.getenv("APPDATA")
-            ?: System.getProperty("user.home") + "/AppData/Roaming"
-        val configFile = Path.of(appData, "Claude", "claude_desktop_config.json").toFile()
-        return writeServerEntry(configFile, "Claude Desktop")
+    fun getMcpConfigJson(): String {
+        val serverUrl = McpServerManager.getInstance().getUrl()
+        val entryName = McpServerManager.MCP_SERVER_ENTRY_NAME
+        val config = buildJsonObject {
+            putJsonObject("mcpServers") {
+                putJsonObject(entryName) {
+                    put("url", serverUrl)
+                }
+            }
+        }
+        return prettyJson.encodeToString(JsonObject.serializer(), config)
     }
 
     private fun writeServerEntry(configFile: File, clientName: String): ConfigResult {
@@ -64,7 +108,6 @@ object ClientAutoConfigurator {
                 put("mcpServers", updatedServers)
             }
 
-            val prettyJson = Json { prettyPrint = true }
             configFile.writeText(prettyJson.encodeToString(JsonObject.serializer(), updatedConfig))
 
             val message = "$clientName 配置已更新: $entryName → $serverUrl"

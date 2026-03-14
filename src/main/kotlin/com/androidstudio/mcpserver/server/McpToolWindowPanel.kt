@@ -1,139 +1,208 @@
 package com.androidstudio.mcpserver.server
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.ui.AnimatedIcon
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBList
 import com.intellij.ui.components.JBScrollPane
+import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
 import java.awt.*
 import java.awt.datatransfer.StringSelection
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
 import javax.swing.*
+import javax.swing.table.DefaultTableCellRenderer
 
 class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
-    private val statusDot = JBLabel()
+    private val statusIcon = JBLabel()
     private val statusText = JBLabel()
     private val urlLabel = JBLabel()
-    private val copyUrlButton = JButton("Copy URL")
-    private val configureCursorButton = JButton("Configure Cursor")
-    private val configureClaudeButton = JButton("Configure Claude Desktop")
+
+    private val cursorStatusIcon = JBLabel()
+    private val cursorStatusLabel = JBLabel()
+    private val cursorActionButton = JButton()
+    private val copyJsonButton = JButton("Copy MCP Config JSON")
+
+    private val footerLabel = JBLabel()
+
     private val restartButton = JButton("Restart Server")
     private val stopButton = JButton("Stop Server")
-    private val toolListModel = DefaultListModel<String>()
+
+    private val toolNames = McpServerManager.TOOL_REGISTRY.map { it.name }
+    private val tableModel = ToolTableModel(toolNames)
+    private val toolTable = JBTable(tableModel)
+
+    private val startTimeMs = System.currentTimeMillis()
+    private val uptimeTimer: Timer
 
     private val stateListener = ServerStateListener { state ->
-        ApplicationManager.getApplication().invokeLater { updateUI(state) }
+        ApplicationManager.getApplication().invokeLater { updateServerState(state) }
+    }
+
+    private val metricsListener = ToolMetricsListener { toolName ->
+        tableModel.updateRow(toolName)
+        updateFooter()
     }
 
     init {
-        border = JBUI.Borders.empty(8)
+        border = JBUI.Borders.empty(6)
         buildUI()
         wireActions()
 
         val manager = McpServerManager.getInstance()
         manager.addStateListener(stateListener)
-        updateUI(manager.getState())
+        ToolMetricsService.addListener(metricsListener)
+        updateServerState(manager.getState())
+        refreshCursorStatus()
+
+        uptimeTimer = Timer(60_000) { updateFooter() }
+        uptimeTimer.isRepeats = true
+        uptimeTimer.start()
     }
 
     private fun buildUI() {
-        val content = Box.createVerticalBox()
+        val mainPanel = JPanel()
+        mainPanel.layout = BoxLayout(mainPanel, BoxLayout.Y_AXIS)
 
-        content.add(buildStatusSection())
-        content.add(Box.createVerticalStrut(12))
-        content.add(buildAutoConfigSection())
-        content.add(Box.createVerticalStrut(12))
-        content.add(buildToolListSection())
-        content.add(Box.createVerticalStrut(12))
-        content.add(buildActionSection())
+        mainPanel.add(buildHeaderPanel())
+        mainPanel.add(Box.createVerticalStrut(JBUI.scale(6)))
+        mainPanel.add(buildClientConfigPanel())
+        mainPanel.add(Box.createVerticalStrut(JBUI.scale(6)))
+        mainPanel.add(buildTablePanel())
+        mainPanel.add(Box.createVerticalStrut(JBUI.scale(4)))
+        mainPanel.add(buildFooterPanel())
+        mainPanel.add(Box.createVerticalStrut(JBUI.scale(6)))
+        mainPanel.add(buildActionPanel())
 
-        add(JBScrollPane(content).apply {
+        add(JBScrollPane(mainPanel).apply {
             border = JBUI.Borders.empty()
+            verticalScrollBarPolicy = ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED
         }, BorderLayout.CENTER)
     }
 
-    private fun buildStatusSection(): JPanel {
-        val panel = JPanel(GridBagLayout())
+    // ---- Header: server status + URL ----
+
+    private fun buildHeaderPanel(): JPanel {
+        val panel = JPanel(BorderLayout())
         panel.alignmentX = LEFT_ALIGNMENT
-        panel.border = JBUI.Borders.empty(4)
-        val gbc = GridBagConstraints().apply {
-            anchor = GridBagConstraints.WEST
-            insets = JBUI.insets(2, 4)
-        }
+        panel.border = JBUI.Borders.empty(4, 4, 4, 4)
 
-        statusDot.font = statusDot.font.deriveFont(14f)
-        statusText.font = statusText.font.deriveFont(Font.BOLD)
+        val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
+        statusIcon.icon = AllIcons.RunConfigurations.TestPassed
+        statusText.font = statusText.font.deriveFont(Font.BOLD, JBUI.scale(13).toFloat())
+        left.add(statusIcon)
+        left.add(statusText)
 
-        gbc.gridx = 0; gbc.gridy = 0
-        panel.add(JBLabel("Status:"), gbc)
-        gbc.gridx = 1
-        panel.add(statusDot, gbc)
-        gbc.gridx = 2; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL
-        panel.add(statusText, gbc)
+        urlLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY)
+        urlLabel.font = urlLabel.font.deriveFont(JBUI.scale(12).toFloat())
+        left.add(Box.createHorizontalStrut(JBUI.scale(8)))
+        left.add(urlLabel)
 
-        gbc.gridx = 0; gbc.gridy = 1; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE
-        panel.add(JBLabel("URL:"), gbc)
-        gbc.gridx = 1; gbc.gridwidth = 2; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL
-        urlLabel.foreground = JBColor.BLUE
-        urlLabel.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-        panel.add(urlLabel, gbc)
-
-        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 3; gbc.weightx = 0.0; gbc.fill = GridBagConstraints.NONE
-        panel.add(copyUrlButton, gbc)
+        panel.add(left, BorderLayout.CENTER)
 
         panel.maximumSize = Dimension(Int.MAX_VALUE, panel.preferredSize.height)
         return panel
     }
 
-    private fun buildAutoConfigSection(): JPanel {
-        val panel = JPanel().apply {
-            layout = BoxLayout(this, BoxLayout.Y_AXIS)
-            alignmentX = LEFT_ALIGNMENT
-            border = BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder("Auto Configure"),
-                JBUI.Borders.empty(4)
-            )
-        }
+    // ---- Client Configuration ----
 
-        val buttonRow = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0))
-        buttonRow.alignmentX = LEFT_ALIGNMENT
-        buttonRow.add(configureCursorButton)
-        buttonRow.add(configureClaudeButton)
-        panel.add(buttonRow)
+    private fun buildClientConfigPanel(): JPanel {
+        val panel = JPanel()
+        panel.layout = BoxLayout(panel, BoxLayout.Y_AXIS)
+        panel.alignmentX = LEFT_ALIGNMENT
+        panel.border = BorderFactory.createCompoundBorder(
+            JBUI.Borders.customLine(JBColor.border(), 1, 0, 1, 0),
+            JBUI.Borders.empty(6, 4, 6, 4)
+        )
+
+        val titleLabel = JBLabel("Client Configuration")
+        titleLabel.font = titleLabel.font.deriveFont(Font.BOLD, JBUI.scale(12).toFloat())
+        titleLabel.alignmentX = LEFT_ALIGNMENT
+        panel.add(titleLabel)
+        panel.add(Box.createVerticalStrut(JBUI.scale(4)))
+
+        val cursorRow = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
+        cursorRow.alignmentX = LEFT_ALIGNMENT
+        cursorRow.add(JBLabel("Cursor:"))
+        cursorRow.add(cursorStatusIcon)
+        cursorRow.add(cursorStatusLabel)
+        cursorRow.add(cursorActionButton)
+        panel.add(cursorRow)
+
+        panel.add(Box.createVerticalStrut(JBUI.scale(4)))
+
+        val copyRow = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
+        copyRow.alignmentX = LEFT_ALIGNMENT
+        copyRow.add(copyJsonButton)
+        panel.add(copyRow)
 
         panel.maximumSize = Dimension(Int.MAX_VALUE, panel.preferredSize.height)
         return panel
     }
 
-    private fun buildToolListSection(): JPanel {
-        val panel = JPanel(BorderLayout()).apply {
-            alignmentX = LEFT_ALIGNMENT
-            border = BorderFactory.createTitledBorder("Registered Tools (${McpServerManager.TOOL_REGISTRY.size})")
-        }
+    // ---- Tool metrics table ----
 
-        for (tool in McpServerManager.TOOL_REGISTRY) {
-            toolListModel.addElement("${tool.name}  —  ${tool.description}")
-        }
+    private fun buildTablePanel(): JPanel {
+        val panel = JPanel(BorderLayout())
+        panel.alignmentX = LEFT_ALIGNMENT
 
-        val list = JBList(toolListModel).apply {
-            selectionMode = ListSelectionModel.SINGLE_SELECTION
-            visibleRowCount = 12
-            cellRenderer = ToolListCellRenderer()
-        }
+        val titleLabel = JBLabel("Registered Tools (${toolNames.size})")
+        titleLabel.font = titleLabel.font.deriveFont(Font.BOLD, JBUI.scale(12).toFloat())
+        titleLabel.border = JBUI.Borders.empty(0, 4, 4, 0)
+        panel.add(titleLabel, BorderLayout.NORTH)
 
-        panel.add(JBScrollPane(list).apply {
-            preferredSize = Dimension(0, 240)
-        }, BorderLayout.CENTER)
+        configureTable()
+        val scrollPane = JBScrollPane(toolTable)
+        scrollPane.preferredSize = Dimension(0, JBUI.scale(260))
+        panel.add(scrollPane, BorderLayout.CENTER)
 
-        panel.maximumSize = Dimension(Int.MAX_VALUE, 300)
+        panel.maximumSize = Dimension(Int.MAX_VALUE, JBUI.scale(320))
         return panel
     }
 
-    private fun buildActionSection(): JPanel {
-        val panel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 0))
+    private fun configureTable() {
+        toolTable.setShowGrid(false)
+        toolTable.intercellSpacing = Dimension(0, 0)
+        toolTable.rowHeight = JBUI.scale(24)
+        toolTable.isStriped = true
+        toolTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION)
+        toolTable.autoResizeMode = JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS
+
+        toolTable.columnModel.getColumn(ToolTableModel.COL_TOOL).preferredWidth = JBUI.scale(140)
+        toolTable.columnModel.getColumn(ToolTableModel.COL_CALLS).preferredWidth = JBUI.scale(50)
+        toolTable.columnModel.getColumn(ToolTableModel.COL_TOKENS).preferredWidth = JBUI.scale(60)
+        toolTable.columnModel.getColumn(ToolTableModel.COL_LAST_MS).preferredWidth = JBUI.scale(60)
+        toolTable.columnModel.getColumn(ToolTableModel.COL_STATUS).preferredWidth = JBUI.scale(70)
+
+        val rightRenderer = object : DefaultTableCellRenderer() {
+            init { horizontalAlignment = SwingConstants.RIGHT }
+        }
+        toolTable.columnModel.getColumn(ToolTableModel.COL_CALLS).cellRenderer = rightRenderer
+        toolTable.columnModel.getColumn(ToolTableModel.COL_TOKENS).cellRenderer = rightRenderer
+        toolTable.columnModel.getColumn(ToolTableModel.COL_LAST_MS).cellRenderer = rightRenderer
+
+        toolTable.columnModel.getColumn(ToolTableModel.COL_STATUS).cellRenderer = StatusCellRenderer()
+    }
+
+    // ---- Footer stats ----
+
+    private fun buildFooterPanel(): JPanel {
+        val panel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
+        panel.alignmentX = LEFT_ALIGNMENT
+        footerLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY)
+        footerLabel.font = footerLabel.font.deriveFont(JBUI.scale(11).toFloat())
+        panel.add(footerLabel)
+        updateFooter()
+        panel.maximumSize = Dimension(Int.MAX_VALUE, panel.preferredSize.height)
+        return panel
+    }
+
+    // ---- Action buttons ----
+
+    private fun buildActionPanel(): JPanel {
+        val panel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0))
         panel.alignmentX = LEFT_ALIGNMENT
         panel.add(restartButton)
         panel.add(stopButton)
@@ -141,28 +210,29 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
         return panel
     }
 
-    private fun wireActions() {
-        copyUrlButton.addActionListener {
-            val url = McpServerManager.getInstance().getUrl()
-            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(url), null)
-        }
+    // ---- Actions ----
 
-        configureCursorButton.addActionListener {
+    private fun wireActions() {
+        cursorActionButton.addActionListener {
             ApplicationManager.getApplication().executeOnPooledThread {
                 val result = ClientAutoConfigurator.configureCursor()
                 ApplicationManager.getApplication().invokeLater {
                     ClientAutoConfigurator.showResultNotification(result)
+                    refreshCursorStatus()
                 }
             }
         }
 
-        configureClaudeButton.addActionListener {
-            ApplicationManager.getApplication().executeOnPooledThread {
-                val result = ClientAutoConfigurator.configureClaude()
-                ApplicationManager.getApplication().invokeLater {
-                    ClientAutoConfigurator.showResultNotification(result)
-                }
-            }
+        copyJsonButton.addActionListener {
+            val json = ClientAutoConfigurator.getMcpConfigJson()
+            Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(json), null)
+            val originalText = copyJsonButton.text
+            copyJsonButton.text = "Copied!"
+            copyJsonButton.isEnabled = false
+            Timer(1500) {
+                copyJsonButton.text = originalText
+                copyJsonButton.isEnabled = true
+            }.apply { isRepeats = false; start() }
         }
 
         restartButton.addActionListener {
@@ -176,71 +246,131 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
                 McpServerManager.getInstance().stop()
             }
         }
-
-        urlLabel.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) {
-                val url = McpServerManager.getInstance().getUrl()
-                Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(url), null)
-            }
-        })
     }
 
-    private fun updateUI(state: ServerState) {
+    // ---- State updates ----
+
+    private fun updateServerState(state: ServerState) {
         val manager = McpServerManager.getInstance()
 
         when (state) {
             ServerState.RUNNING -> {
-                statusDot.text = "\u25CF"
-                statusDot.foreground = JBColor(Color(0x59A869), Color(0x59A869))
+                statusIcon.icon = AllIcons.RunConfigurations.TestPassed
                 statusText.text = "Running"
                 urlLabel.text = manager.getUrl()
-                setButtonsEnabled(running = true)
+                setButtonsEnabled(true)
             }
             ServerState.STARTING -> {
-                statusDot.text = "\u25CF"
-                statusDot.foreground = JBColor.YELLOW
+                statusIcon.icon = AnimatedIcon.Default()
                 statusText.text = "Starting..."
                 urlLabel.text = "..."
-                setButtonsEnabled(running = false)
+                setButtonsEnabled(false)
             }
             ServerState.STOPPED -> {
-                statusDot.text = "\u25CF"
-                statusDot.foreground = JBColor.GRAY
+                statusIcon.icon = AllIcons.RunConfigurations.TestIgnored
                 statusText.text = "Stopped"
-                urlLabel.text = "—"
-                setButtonsEnabled(running = false)
+                urlLabel.text = ""
+                setButtonsEnabled(false)
             }
             ServerState.ERROR -> {
-                statusDot.text = "\u25CF"
-                statusDot.foreground = JBColor.RED
+                statusIcon.icon = AllIcons.RunConfigurations.TestError
                 statusText.text = "Error: ${manager.getErrorMessage() ?: "unknown"}"
-                urlLabel.text = "—"
-                setButtonsEnabled(running = false)
+                urlLabel.text = ""
+                setButtonsEnabled(false)
             }
+        }
+
+        refreshCursorStatus()
+    }
+
+    private fun refreshCursorStatus() {
+        val status = ClientAutoConfigurator.isCursorConfigured()
+        if (status.configured) {
+            cursorStatusIcon.icon = AllIcons.RunConfigurations.TestPassed
+            val urlMatch = status.configuredUrl == McpServerManager.getInstance().getUrl()
+            cursorStatusLabel.text = if (urlMatch) {
+                "Configured"
+            } else {
+                "Configured (URL mismatch: ${status.configuredUrl})"
+            }
+            cursorStatusLabel.foreground = if (urlMatch) {
+                JBColor.namedColor("Label.foreground", JBColor.foreground())
+            } else {
+                JBColor.ORANGE
+            }
+            cursorActionButton.text = "Reconfigure"
+        } else {
+            cursorStatusIcon.icon = AllIcons.RunConfigurations.TestIgnored
+            cursorStatusLabel.text = "Not configured"
+            cursorStatusLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY)
+            cursorActionButton.text = "Configure Cursor"
         }
     }
 
     private fun setButtonsEnabled(running: Boolean) {
-        copyUrlButton.isEnabled = running
-        configureCursorButton.isEnabled = running
-        configureClaudeButton.isEnabled = running
+        cursorActionButton.isEnabled = running
+        copyJsonButton.isEnabled = running
         stopButton.isEnabled = running
         restartButton.isEnabled = true
     }
 
-    override fun dispose() {
-        McpServerManager.getInstance().removeStateListener(stateListener)
+    private fun updateFooter() {
+        val totalCalls = ToolMetricsService.getTotalInvocations()
+        val totalTokens = ToolMetricsService.getTotalTokens()
+        val uptimeMs = System.currentTimeMillis() - startTimeMs
+        val uptimeStr = formatUptime(uptimeMs)
+        val tokensStr = formatTokensCompact(totalTokens)
+        footerLabel.text = "Total: $totalCalls calls  |  $tokensStr tokens  |  Uptime: $uptimeStr"
     }
 
-    private class ToolListCellRenderer : DefaultListCellRenderer() {
-        override fun getListCellRendererComponent(
-            list: JList<*>?, value: Any?, index: Int,
-            isSelected: Boolean, cellHasFocus: Boolean
+    private fun formatUptime(ms: Long): String {
+        val totalSec = ms / 1000
+        val h = totalSec / 3600
+        val m = (totalSec % 3600) / 60
+        return if (h > 0) "${h}h ${m}m" else "${m}m"
+    }
+
+    private fun formatTokensCompact(tokens: Long): String = when {
+        tokens >= 1_000_000 -> String.format("%.1fM", tokens / 1_000_000.0)
+        tokens >= 1_000 -> String.format("%.1fK", tokens / 1_000.0)
+        else -> tokens.toString()
+    }
+
+    override fun dispose() {
+        uptimeTimer.stop()
+        McpServerManager.getInstance().removeStateListener(stateListener)
+        ToolMetricsService.removeListener(metricsListener)
+    }
+
+    // ---- Status column cell renderer with animated icon ----
+
+    private class StatusCellRenderer : DefaultTableCellRenderer() {
+        private val executingIcon = AnimatedIcon.Default()
+        private val errorIcon = AllIcons.General.Error
+
+        override fun getTableCellRendererComponent(
+            table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int
         ): Component {
-            val comp = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus)
-            border = JBUI.Borders.empty(2, 8)
-            font = font.deriveFont(12f)
-            return comp
+            val label = super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column) as JLabel
+            val status = value as? String ?: ""
+            when (status) {
+                "EXECUTING" -> {
+                    label.icon = executingIcon
+                    label.text = "Running"
+                    label.foreground = JBColor.namedColor("Label.foreground", JBColor.foreground())
+                }
+                "ERROR" -> {
+                    label.icon = errorIcon
+                    label.text = "Error"
+                    label.foreground = JBColor.RED
+                }
+                else -> {
+                    label.icon = null
+                    label.text = ""
+                }
+            }
+            label.horizontalAlignment = SwingConstants.LEFT
+            return label
         }
     }
 }

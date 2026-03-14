@@ -32,21 +32,27 @@ object ToolRegistrar {
     }
 
     private inline fun <reified A, reified R> handleTool(
+        toolName: String,
         arguments: JsonObject?,
         argsDeserializer: kotlinx.serialization.KSerializer<A>,
         resultSerializer: kotlinx.serialization.KSerializer<R>,
         policy: SizePolicy,
         action: (com.intellij.openapi.project.Project, A) -> R
     ): CallToolResult {
+        ToolMetricsService.markStart(toolName)
+        val startTime = System.currentTimeMillis()
         return try {
             val project = ProjectResolver.resolve(arguments)
             PsiUtils.refreshForExternalChanges(project)
             val args = McpJson.decodeFromJsonElement(argsDeserializer, arguments ?: JsonObject(emptyMap()))
             val result = action(project, args)
             val json = ResponseFormatter.format(result, resultSerializer, policy)
+            ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
             CallToolResult(content = listOf(TextContent(json)))
         } catch (e: ToolException) {
-            CallToolResult(content = listOf(TextContent(e.toErrorJson())), isError = true)
+            val errorJson = e.toErrorJson()
+            ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+            CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
         }
     }
 
@@ -57,6 +63,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.resolveSymbol
         ) { request ->
             handleTool(
+                "resolve_symbol",
                 request.arguments,
                 ResolveSymbolArgs.serializer(),
                 SymbolInfo.serializer(),
@@ -74,6 +81,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.findReferences
         ) { request ->
             handleTool(
+                "find_references",
                 request.arguments,
                 FindReferencesArgs.serializer(),
                 ReferenceResult.serializer(),
@@ -91,6 +99,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.getScope
         ) { request ->
             handleTool(
+                "get_scope",
                 request.arguments,
                 GetScopeArgs.serializer(),
                 ScopeResult.serializer(),
@@ -108,6 +117,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.checkpoint
         ) { request ->
             handleTool(
+                "checkpoint",
                 request.arguments,
                 CheckpointArgs.serializer(),
                 CheckpointResult.serializer(),
@@ -125,6 +135,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.refactor
         ) { request ->
             handleTool(
+                "refactor",
                 request.arguments,
                 RefactorArgs.serializer(),
                 RefactorResult.serializer(),
@@ -141,6 +152,9 @@ object ToolRegistrar {
             description = "项目全景图、依赖关系图、变更影响分析、API 表面分析、Build Variant 感知",
             inputSchema = ToolSchemas.queryProject
         ) { request ->
+            val toolName = "query_project"
+            ToolMetricsService.markStart(toolName)
+            val startTime = System.currentTimeMillis()
             try {
                 val project = ProjectResolver.resolve(request.arguments)
                 PsiUtils.refreshForExternalChanges(project)
@@ -155,9 +169,12 @@ object ToolRegistrar {
                     SizePolicy.QUERY_PROJECT_DETAIL
                 }
                 val json = ResponseFormatter.format(result, ProjectOverview.serializer(), policy)
+                ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
                 CallToolResult(content = listOf(TextContent(json)))
             } catch (e: ToolException) {
-                CallToolResult(content = listOf(TextContent(e.toErrorJson())), isError = true)
+                val errorJson = e.toErrorJson()
+                ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+                CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
             }
         }
     }
@@ -168,6 +185,9 @@ object ToolRegistrar {
             description = "基于注解扫描生成 Room/Retrofit/Hilt/Compose/Navigation 的结构化框架视图",
             inputSchema = ToolSchemas.queryFramework
         ) { request ->
+            val toolName = "query_framework"
+            ToolMetricsService.markStart(toolName)
+            val startTime = System.currentTimeMillis()
             try {
                 val project = ProjectResolver.resolve(request.arguments)
                 PsiUtils.refreshForExternalChanges(project)
@@ -182,9 +202,12 @@ object ToolRegistrar {
                     SizePolicy.QUERY_FRAMEWORK_LIST
                 }
                 val json = ResponseFormatter.format(result, FrameworkViewResult.serializer(), policy)
+                ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
                 CallToolResult(content = listOf(TextContent(json)))
             } catch (e: ToolException) {
-                CallToolResult(content = listOf(TextContent(e.toErrorJson())), isError = true)
+                val errorJson = e.toErrorJson()
+                ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+                CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
             }
         }
     }
@@ -196,6 +219,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.analyzeDataFlow
         ) { request ->
             handleTool(
+                "analyze_data_flow",
                 request.arguments,
                 AnalyzeDataFlowArgs.serializer(),
                 DataFlowResult.serializer(),
@@ -213,6 +237,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.checkRules
         ) { request ->
             handleTool(
+                "check_rules",
                 request.arguments,
                 CheckRulesArgs.serializer(),
                 RuleCheckResult.serializer(),
@@ -230,6 +255,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.structuralSearch
         ) { request ->
             handleTool(
+                "structural_search",
                 request.arguments,
                 StructuralSearchArgs.serializer(),
                 SearchMatchResult.serializer(),
@@ -247,6 +273,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.analyzeQuality
         ) { request ->
             handleTool(
+                "analyze_quality",
                 request.arguments,
                 AnalyzeQualityArgs.serializer(),
                 QualityReport.serializer(),
@@ -264,6 +291,7 @@ object ToolRegistrar {
             inputSchema = ToolSchemas.sandbox
         ) { request ->
             handleTool(
+                "sandbox",
                 request.arguments,
                 SandboxArgs.serializer(),
                 SandboxResult.serializer(),
