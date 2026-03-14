@@ -1,6 +1,7 @@
 ---
 name: android-studio-mcp
 description: Enforces using Android Studio MCP tools for code analysis, refactoring, and project understanding instead of CLI commands. Provides a decision tree mapping developer intents to the correct MCP tool. Triggers when working on Android/Kotlin/Java projects with the android-studio-mcp server connected.
+always-apply: false
 ---
 
 # Android Studio MCP Tools — Usage Guide

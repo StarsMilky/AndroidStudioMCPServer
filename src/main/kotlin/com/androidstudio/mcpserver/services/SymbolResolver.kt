@@ -9,6 +9,7 @@ import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
 import com.intellij.psi.*
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.*
 
 object SymbolResolver {
 
@@ -54,7 +55,49 @@ object SymbolResolver {
             McpErrorCode.SYMBOL_NOT_FOUND,
             mapOf("reason" to "Cannot resolve symbol at position")
         )
+
+        val packageDirective = findAncestor(element, PsiPackageStatement::class.java, KtPackageDirective::class.java)
+        if (packageDirective != null) {
+            val packageName = when (packageDirective) {
+                is PsiPackageStatement -> packageDirective.packageName
+                is KtPackageDirective -> packageDirective.fqName.asString()
+                else -> element.text ?: "<unknown>"
+            }
+            return SymbolInfo(
+                qualifiedType = packageName,
+                declarationFile = element.containingFile?.virtualFile
+                    ?.let { ProjectUtils.toRelativePath(project, it) } ?: "<unknown>",
+                declarationLine = getLineNumber(element),
+                kind = SymbolKind.PACKAGE
+            )
+        }
+
+        val importDirective = findAncestor(element, PsiImportStatement::class.java, KtImportDirective::class.java)
+        if (importDirective != null) {
+            val importFqn = when (importDirective) {
+                is PsiImportStatement -> importDirective.qualifiedName ?: element.text ?: "<unknown>"
+                is KtImportDirective -> importDirective.importedFqName?.asString() ?: element.text ?: "<unknown>"
+                else -> element.text ?: "<unknown>"
+            }
+            return SymbolInfo(
+                qualifiedType = importFqn,
+                declarationFile = element.containingFile?.virtualFile
+                    ?.let { ProjectUtils.toRelativePath(project, it) } ?: "<unknown>",
+                declarationLine = getLineNumber(element),
+                kind = SymbolKind.CLASS
+            )
+        }
+
         return buildSymbolInfo(project, parent)
+    }
+
+    private fun findAncestor(element: PsiElement, vararg types: Class<out PsiElement>): PsiElement? {
+        var current: PsiElement? = element
+        repeat(10) {
+            current = current?.parent ?: return null
+            if (types.any { it.isInstance(current) }) return current
+        }
+        return null
     }
 
     private fun resolveQualifiedName(element: PsiElement): String = when (element) {
@@ -88,17 +131,32 @@ object SymbolResolver {
             val fqName = element.fqName?.asString()
             fqName ?: element.name ?: "<anonymous>"
         }
+        is KtObjectDeclaration -> {
+            val fqName = element.fqName?.asString()
+            fqName ?: element.name ?: "<anonymous>"
+        }
         is KtParameter -> element.name ?: "<anonymous>"
-        else -> element.text.take(50)
+        is PsiPackage -> element.qualifiedName
+        else -> {
+            try {
+                val text = element.text
+                if (text != null) text.take(80) else "<unknown>"
+            } catch (_: Exception) {
+                "<unknown>"
+            }
+        }
     }
 
     private fun classifySymbolKind(element: PsiElement): SymbolKind = when (element) {
-        is PsiClass, is KtClass, is KtObjectDeclaration -> SymbolKind.CLASS
+        is PsiClass -> if (element.isEnum) SymbolKind.ENUM_ENTRY else SymbolKind.CLASS
+        is KtClass -> SymbolKind.CLASS
+        is KtObjectDeclaration -> SymbolKind.OBJECT
         is PsiMethod, is KtNamedFunction -> SymbolKind.METHOD
         is PsiField -> SymbolKind.FIELD
         is KtProperty -> SymbolKind.PROPERTY
         is PsiParameter, is KtParameter -> SymbolKind.PARAMETER
         is PsiLocalVariable -> SymbolKind.VARIABLE
+        is PsiPackage -> SymbolKind.PACKAGE
         else -> SymbolKind.VARIABLE
     }
 

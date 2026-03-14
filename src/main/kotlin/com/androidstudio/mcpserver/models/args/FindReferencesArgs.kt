@@ -16,5 +16,7 @@ data class FindReferencesArgs(
 
 @Serializable
 enum class FindReferencesMode {
-    USAGES, CALL_HIERARCHY, TYPE_HIERARCHY
+    USAGES, CALLERS, CALLEES, TYPE_HIERARCHY,
+    @Deprecated("Use CALLERS instead")
+    CALL_HIERARCHY
 }

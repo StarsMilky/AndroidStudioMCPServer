@@ -1,47 +1,31 @@
-<!-- Plugin Configuration File: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <!-- Unique identifier of the plugin. It should be FQN, cannot be changed between the plugin versions. -->
     <id>com.androidstudio.mcpserver.AndroidStudioMCPServer</id>
+    <name>Android Studio PSI Tools (MCP)</name>
+    <vendor url="https://github.com/phodal">phodal</vendor>
 
-    <!-- Public plugin name should be written in Title Case.
-         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
-    <name>AndroidStudioMCPServer</name>
-
-    <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
-
-    <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
-         Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Enter short description for your plugin here.<br>
-        <em>most HTML tags may be used</em>
+        12 PSI-based code intelligence tools for AI agents via MCP protocol.
+        Provides symbol resolution, reference finding, refactoring, project analysis,
+        framework views, data flow analysis, quality metrics, and more.
     ]]></description>
 
-    <!-- Product and plugin compatibility requirements.
-         Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.java</depends>
     <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.modules.json</depends>
-    <depends>com.intellij.mcpServer</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <!-- P0 MVP Tools -->
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.ResolveSymbolTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.FindReferencesTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.GetScopeTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.CheckpointTool"/>
-        <!-- P1 Tools -->
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.RefactorTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.QueryProjectTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.QueryFrameworkTool"/>
-        <!-- P2 Tools -->
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.AnalyzeDataFlowTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.CheckRulesTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.StructuralSearchTool"/>
-        <!-- P3 Tools -->
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.AnalyzeQualityTool"/>
-        <mcpServerTool implementation="com.androidstudio.mcpserver.tools.SandboxTool"/>
+        <applicationService
+            serviceImplementation="com.androidstudio.mcpserver.server.McpServerManager"/>
+        <postStartupActivity
+            implementation="com.androidstudio.mcpserver.server.McpServerStartupActivity"/>
+        <toolWindow id="MCP PSI Tools"
+                    anchor="bottom"
+                    secondary="true"
+                    icon="AllIcons.Toolwindows.WebToolWindow"
+                    factoryClass="com.androidstudio.mcpserver.server.McpToolWindowFactory"/>
+        <notificationGroup id="MCP PSI Tools"
+                           displayType="BALLOON"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">

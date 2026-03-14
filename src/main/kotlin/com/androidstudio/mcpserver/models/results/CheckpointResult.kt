@@ -8,7 +8,8 @@ data class CheckpointResult(
     val timestamp: String? = null,
     val entries: List<HistoryEntry>? = null,
     val diff: String? = null,
-    val restoredFiles: Int? = null
+    val restoredFiles: Int? = null,
+    val hint: String? = null
 )
 
 @Serializable

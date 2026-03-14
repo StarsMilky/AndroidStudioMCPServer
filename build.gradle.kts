@@ -23,12 +23,15 @@ dependencies {
         bundledPlugin("com.intellij.java")
         bundledPlugin("org.jetbrains.kotlin")
         bundledPlugin("com.intellij.modules.json")
-        plugin("com.intellij.mcpServer", "1.0.30")
     }
 
-    compileOnly("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("io.modelcontextprotocol:kotlin-sdk:0.9.0")
+    implementation("io.ktor:ktor-server-cio:3.2.3")
+    implementation("io.ktor:ktor-server-content-negotiation:3.2.3")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:3.2.3")
 
-    testImplementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
     testImplementation("junit:junit:4.13.2")
 }
 

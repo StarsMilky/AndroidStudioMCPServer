@@ -10,4 +10,4 @@ data class AnalyzeDataFlowArgs(
 )
 
 @Serializable
-enum class DataFlowMode { NULLABILITY, FORWARD, BACKWARD }
+enum class DataFlowMode { NULLABILITY, FORWARD, BACKWARD, EXTERNAL_ANNOTATIONS }

@@ -7,9 +7,26 @@ import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.project.DumbService
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Computable
+import com.intellij.openapi.vfs.VirtualFileManager
+import com.intellij.openapi.vfs.newvfs.RefreshQueue
+import com.intellij.psi.PsiDocumentManager
 import java.util.concurrent.Callable
 
 object PsiUtils {
+
+    /**
+     * Sync VFS with disk so PSI reflects external edits (e.g. from Cursor, git, CLI).
+     * Must be called OUTSIDE a read/write action.
+     */
+    fun refreshForExternalChanges(project: Project) {
+        val app = ApplicationManager.getApplication()
+        if (app.isReadAccessAllowed || app.isDispatchThread) return
+
+        app.invokeAndWait {
+            VirtualFileManager.getInstance().refreshWithoutFileWatcher(/* asynchronous = */ false)
+            PsiDocumentManager.getInstance(project).commitAllDocuments()
+        }
+    }
 
     /**
      * Fast-fail read action: throws INDEXING_IN_PROGRESS if IDE is indexing.

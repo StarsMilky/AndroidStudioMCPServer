@@ -31,7 +31,8 @@ object ReferenceSearcher {
 
             when (args.mode) {
                 FindReferencesMode.USAGES -> searchUsages(project, target, args)
-                FindReferencesMode.CALL_HIERARCHY -> searchCallHierarchy(project, target, args)
+                FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY -> searchCallHierarchy(project, target, args)
+                FindReferencesMode.CALLEES -> searchCallees(project, target, args)
                 FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
             }
         }
@@ -125,6 +126,88 @@ object ReferenceSearcher {
 
     private fun countNodes(node: CallNode): Int = 1 + node.children.sumOf { countNodes(it) }
 
+    private fun searchCallees(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
+        val method = PsiTreeUtil.getParentOfType(target, PsiMethod::class.java, false)
+            ?: PsiTreeUtil.getParentOfType(target, KtNamedFunction::class.java, false)
+            ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND, mapOf("reason" to "Target is not a method"))
+
+        val callees = mutableListOf<UsageInfo>()
+        val visited = mutableSetOf<String>()
+
+        val body: PsiElement? = when (method) {
+            is PsiMethod -> method.body
+            is KtNamedFunction -> method.bodyBlockExpression ?: method.bodyExpression
+            else -> null
+        }
+
+        if (body != null) {
+            collectCallees(project, body, callees, visited, args.limit)
+        }
+
+        return ReferenceResult(
+            total = callees.size,
+            usages = callees
+        )
+    }
+
+    private fun collectCallees(
+        project: Project, element: PsiElement,
+        callees: MutableList<UsageInfo>, visited: MutableSet<String>, limit: Int
+    ) {
+        if (callees.size >= limit) return
+
+        when (element) {
+            is PsiMethodCallExpression -> {
+                val resolved = element.resolveMethod()
+                if (resolved != null) {
+                    val key = "${resolved.containingClass?.qualifiedName}.${resolved.name}"
+                    if (visited.add(key)) {
+                        val file = resolved.containingFile?.virtualFile
+                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file) else "<unknown>"
+                        val doc = resolved.containingFile?.let {
+                            PsiDocumentManager.getInstance(project).getDocument(it)
+                        }
+                        val line = doc?.getLineNumber(resolved.textOffset)?.plus(1) ?: 0
+                        callees.add(UsageInfo(
+                            file = filePath, line = line,
+                            code = "${resolved.containingClass?.name ?: ""}.${resolved.name}(${resolved.parameterList.parameters.joinToString(", ") { it.type.presentableText }})",
+                            usageType = UsageType.CALL
+                        ))
+                    }
+                }
+            }
+            is KtCallExpression -> {
+                val ref = element.calleeExpression?.reference?.resolve()
+                    ?: element.references.firstNotNullOfOrNull { it.resolve() }
+                if (ref is PsiNamedElement) {
+                    val key = when (ref) {
+                        is PsiMethod -> "${ref.containingClass?.qualifiedName}.${ref.name}"
+                        is KtNamedFunction -> ref.fqName?.asString() ?: ref.name ?: ""
+                        else -> ref.text?.take(50) ?: ""
+                    }
+                    if (key.isNotEmpty() && visited.add(key)) {
+                        val file = ref.containingFile?.virtualFile
+                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file) else "<unknown>"
+                        val doc = ref.containingFile?.let {
+                            PsiDocumentManager.getInstance(project).getDocument(it)
+                        }
+                        val line = doc?.getLineNumber(ref.textOffset)?.plus(1) ?: 0
+                        callees.add(UsageInfo(
+                            file = filePath, line = line,
+                            code = key.substringAfterLast(".").ifEmpty { key },
+                            usageType = UsageType.CALL
+                        ))
+                    }
+                }
+            }
+        }
+
+        for (child in element.children) {
+            if (callees.size >= limit) break
+            collectCallees(project, child, callees, visited, limit)
+        }
+    }
+
     private fun searchTypeHierarchy(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
         val psiClass = when (target) {
             is PsiClass -> target
@@ -155,6 +238,7 @@ object ReferenceSearcher {
     }
 
     private fun findEnclosingMethod(element: PsiElement): PsiElement? {
+        if (element is PsiMethod || element is KtNamedFunction) return element
         return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java)
             ?: PsiTreeUtil.getParentOfType(element, KtNamedFunction::class.java)
     }

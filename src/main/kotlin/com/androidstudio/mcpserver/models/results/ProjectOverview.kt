@@ -4,11 +4,16 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ProjectOverview(
+    val level: String? = null,
+    val projectClasses: Int? = null,
     val modules: List<ModuleInfo>? = null,
     val architecturePattern: String? = null,
     val entryPoints: List<String>? = null,
     val dependencyDirection: String? = null,
     val cycles: List<CycleInfo>? = null,
+    val frameworks: Map<String, FrameworkOverviewSummary>? = null,
+    val keyClasses: List<KeyClassInfo>? = null,
+    val classMap: Map<String, List<ClassEntry>>? = null,
     val impact: ImpactAnalysis? = null,
     val couplingMetrics: Map<String, CouplingMetric>? = null,
     val publicApi: ApiSurface? = null,
@@ -16,6 +21,22 @@ data class ProjectOverview(
     val variant: VariantInfo? = null,
     val truncated: Boolean = false,
     val hint: String? = null
+)
+
+@Serializable
+data class FrameworkOverviewSummary(val count: Int, val details: String? = null)
+
+@Serializable
+data class KeyClassInfo(val name: String, val module: String, val role: String, val references: Int = 0)
+
+@Serializable
+data class ClassEntry(
+    val name: String,
+    val kind: String,
+    val visibility: String? = null,
+    val superTypes: List<String>? = null,
+    val annotations: List<String>? = null,
+    val members: List<String>? = null
 )
 
 @Serializable
