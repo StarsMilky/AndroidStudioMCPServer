@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.androidstudio.mcpserver.AndroidStudioMCPServer</id>
     <name>Android Studio MCP - Code Intelligence</name>
-    <vendor url="https://github.com/phodal">phodal</vendor>
+    <vendor url="https://github.com/StarsMilky">StarsMilky</vendor>
 
     <description><![CDATA[
         12 IDE-level code intelligence tools for AI agents via MCP protocol.
