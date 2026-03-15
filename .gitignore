@@ -45,3 +45,8 @@ bin/
 .intellijPlatform
 
 .venv/
+
+### Project local ###
+eval/
+docs/
+tests/
