@@ -51,6 +51,7 @@ eval/
 docs/
 tests/
 specs/
+requirements/
 signing/
 token.txt
 marketplace-zip-signer-cli*.jar
