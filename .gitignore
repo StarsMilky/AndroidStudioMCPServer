@@ -56,3 +56,4 @@ signing/
 token.txt
 marketplace-zip-signer-cli*.jar
 .cursor/commands/
+.specify/
