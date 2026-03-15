@@ -20,14 +20,18 @@ Instead of letting AI agents fumble through `grep` and file reads, give them dir
 | "Rename safely" | `sed` → misses XML/Manifest references | `refactor(RENAME)` → updates all references across languages |
 | "Project architecture?" | Read 20+ files manually | `query_project(OVERVIEW)` → full picture in 1 call |
 
-### Measured Impact
+### Benchmark (single project, for reference only)
 
-Automated evaluation on a 159-class Android project with Room, Hilt, and Compose:
+Evaluated on one 159-class Android project (Room + Hilt + Compose):
 
-- **8x token efficiency** — Agent consumes 88% fewer tokens for equivalent tasks
-- **100% signal-to-noise** — structured semantic data vs 67% noise from grep
-- **12/12 task completion** — vs 8/12 with CLI (6 tasks are impossible without the IDE)
-- **Checkpoint safety net** — rollback capability before risky code changes
+| Dimension | MCP | CLI |
+|-----------|-----|-----|
+| Token Efficiency | **8x** fewer tokens | Baseline |
+| Signal-to-Noise | **100%** structured data | 33% (67% noise) |
+| Task Completion | **12/12** | 8/12 (6 impossible without IDE) |
+| Safety | Checkpoint + semantic refactor | None |
+
+> *Data from a single project evaluation. Results may vary depending on project size and architecture.*
 
 ---
 
@@ -131,34 +135,6 @@ The plugin adds an **MCP Code Intelligence** tool window to Android Studio:
 - Cursor configuration status
 - Per-tool invocation count, token usage, execution time
 - Real-time execution indicator
-
----
-
-## Evaluation
-
-An automated evaluation framework is included in `eval/`. It compares MCP tools against equivalent CLI operations across 5 dimensions:
-
-| Dimension | MCP | CLI |
-|-----------|-----|-----|
-| Token Efficiency | **8.0x** more efficient | Baseline |
-| Signal-to-Noise | **100%** structured data | 33% (67% noise) |
-| Task Completion | **12/12** (100%) | 8/12 (67%) |
-| Safety | Checkpoint + semantic refactor | None |
-| Avg Latency | 1.2s | ~0ms (local) |
-
-Run it yourself:
-
-```bash
-python -m venv .venv
-# Windows
-.venv/Scripts/pip install requests sseclient-py
-.venv/Scripts/python eval/mcp_evaluator.py
-# macOS / Linux
-.venv/bin/pip install requests sseclient-py
-.venv/bin/python eval/mcp_evaluator.py
-```
-
-See [`docs/evaluation-plan.md`](docs/evaluation-plan.md) for methodology details.
 
 ---
 

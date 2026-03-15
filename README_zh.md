@@ -20,14 +20,18 @@
 | "安全重命名" | `sed` → 漏改 XML / Manifest | `refactor(RENAME)` → 跨语言更新所有引用 |
 | "项目整体架构？" | 手动读 20+ 个文件 | `query_project(OVERVIEW)` → 一次调用获取全貌 |
 
-### 量化评估结果
+### 性能参考（单项目评估，数据仅供参考）
 
-在一个包含 159 个类（Room + Hilt + Compose）的 Android 项目上自动评估：
+在一个包含 159 个类（Room + Hilt + Compose）的 Android 项目上评估：
 
-- **Token 效率提升 8 倍** — Agent 执行等效任务消耗的 Token 减少 88%
-- **信噪比 100%** — 结构化语义数据 vs grep 的 67% 噪声
-- **任务完成率 12/12 (100%)** — CLI 仅 8/12（6 个任务不借助 IDE 根本无法完成）
-- **安全网** — checkpoint 提供回滚能力，保护高风险代码修改
+| 维度 | MCP | CLI |
+|------|-----|-----|
+| Token 效率 | 减少 **88%** | 基线 |
+| 信噪比 | **100%** 结构化数据 | 33%（67% 噪声） |
+| 任务完成率 | **12/12** | 8/12（6 个任务 CLI 无法完成） |
+| 安全性 | checkpoint + 语义重构 | 无 |
+
+> *以上数据来自单个项目的评估，实际效果因项目规模和架构而异。*
 
 ---
 
@@ -131,30 +135,6 @@ cd android-studio-mcpserver
 - Cursor 配置状态
 - 每个工具的调用次数、Token 消耗、执行时间
 - 实时执行状态指示
-
----
-
-## 评估框架
-
-项目内置了全自动评估框架 `eval/mcp_evaluator.py`，从 5 个维度对比 MCP 工具与 CLI 等效操作：
-
-| 维度 | MCP | CLI |
-|------|-----|-----|
-| Token 效率 | 高出 **8 倍** | 基线 |
-| 信噪比 | **100%** 结构化数据 | 33%（67% 噪声） |
-| 任务完成率 | **12/12** (100%) | 8/12 (67%) |
-| 安全性 | checkpoint + 语义重构 | 无 |
-| 平均延迟 | 1.2s | ~0ms（本地） |
-
-运行评估：
-
-```bash
-python -m venv .venv
-.venv/Scripts/pip install requests sseclient-py
-.venv/Scripts/python eval/mcp_evaluator.py
-```
-
-详细方法论见 [`docs/evaluation-plan.md`](docs/evaluation-plan.md)。
 
 ---
 
