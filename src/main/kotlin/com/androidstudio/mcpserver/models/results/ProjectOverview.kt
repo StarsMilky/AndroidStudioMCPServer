@@ -20,7 +20,7 @@ data class ProjectOverview(
     val leakyAbstractions: List<LeakyAbstraction>? = null,
     val variant: VariantInfo? = null,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
@@ -36,7 +36,7 @@ data class ClassEntry(
     val visibility: String? = null,
     val superTypes: List<String>? = null,
     val annotations: List<String>? = null,
-    val members: List<String>? = null
+    val members: List<String>? = null,
 )
 
 @Serializable
@@ -44,7 +44,7 @@ data class ModuleInfo(
     val name: String,
     val type: String,
     val dependsOn: List<String>,
-    val stats: ModuleStats
+    val stats: ModuleStats,
 )
 
 @Serializable
@@ -60,7 +60,7 @@ data class ImpactAnalysis(
     val affectedModules: List<String>,
     val affectedTests: List<String>,
     val riskLevel: String,
-    val suggestion: String? = null
+    val suggestion: String? = null,
 )
 
 @Serializable
@@ -85,5 +85,5 @@ data class VariantInfo(
     val flavors: List<String>,
     val activeSourceDirs: List<String>,
     val inactiveSourceDirs: List<String>,
-    val buildConfigFields: Map<String, String>
+    val buildConfigFields: Map<String, String>,
 )

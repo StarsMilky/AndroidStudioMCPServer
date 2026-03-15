@@ -6,7 +6,13 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.LocalFileSystem
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import java.io.File
 import java.nio.file.Path
 
@@ -41,12 +47,10 @@ object ClientAutoConfigurator {
             val entry = servers[entryName]?.jsonObject ?: return CursorConfigStatus(false, configFile.absolutePath)
             val url = entry["url"]?.jsonPrimitive?.content
 
-            if (url == serverUrl) {
-                CursorConfigStatus(true, configFile.absolutePath, url)
-            } else if (url != null) {
-                CursorConfigStatus(true, configFile.absolutePath, url)
-            } else {
-                CursorConfigStatus(false, configFile.absolutePath)
+            when {
+                url == serverUrl -> CursorConfigStatus(true, configFile.absolutePath, url)
+                url != null -> CursorConfigStatus(true, configFile.absolutePath, url)
+                else -> CursorConfigStatus(false, configFile.absolutePath)
             }
         } catch (e: Exception) {
             log.warn("Failed to check Cursor config", e)

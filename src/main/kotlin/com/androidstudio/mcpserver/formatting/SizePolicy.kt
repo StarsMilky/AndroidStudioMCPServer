@@ -14,5 +14,5 @@ enum class SizePolicy(val maxBytes: Int) {
     CHECK_RULES(3072),
     STRUCTURAL_SEARCH(3072),
     CHECKPOINT(4096),
-    SANDBOX(4096);
+    SANDBOX(4096),
 }

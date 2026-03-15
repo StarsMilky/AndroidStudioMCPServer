@@ -4,17 +4,32 @@ import com.androidstudio.mcpserver.errors.McpErrorCode
 import com.androidstudio.mcpserver.errors.ToolException
 import com.androidstudio.mcpserver.models.args.FindReferencesArgs
 import com.androidstudio.mcpserver.models.args.FindReferencesMode
-import com.androidstudio.mcpserver.models.results.*
+import com.androidstudio.mcpserver.models.results.CallNode
+import com.androidstudio.mcpserver.models.results.InheritorInfo
+import com.androidstudio.mcpserver.models.results.ReferenceResult
+import com.androidstudio.mcpserver.models.results.TypeHierarchyInfo
+import com.androidstudio.mcpserver.models.results.UsageInfo
+import com.androidstudio.mcpserver.models.results.UsageType
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
+import com.intellij.psi.PsiAssignmentExpression
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiMethodCallExpression
+import com.intellij.psi.PsiNamedElement
+import com.intellij.psi.PsiReference
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.asJava.toLightClass
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtNamedFunction
 
 object ReferenceSearcher {
 

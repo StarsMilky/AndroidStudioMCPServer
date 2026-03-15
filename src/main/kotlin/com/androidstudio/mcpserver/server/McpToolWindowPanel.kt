@@ -9,9 +9,25 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBScrollPane
 import com.intellij.ui.table.JBTable
 import com.intellij.util.ui.JBUI
-import java.awt.*
+import java.awt.BorderLayout
+import java.awt.Component
+import java.awt.Dimension
+import java.awt.FlowLayout
+import java.awt.Font
+import java.awt.Toolkit
 import java.awt.datatransfer.StringSelection
-import javax.swing.*
+import javax.swing.BorderFactory
+import javax.swing.Box
+import javax.swing.BoxLayout
+import javax.swing.JButton
+import javax.swing.JLabel
+import javax.swing.JPanel
+import javax.swing.JScrollPane
+import javax.swing.JTable
+import javax.swing.ListSelectionModel
+import javax.swing.ScrollPaneConstants
+import javax.swing.SwingConstants
+import javax.swing.Timer
 import javax.swing.table.DefaultTableCellRenderer
 
 class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
@@ -86,7 +102,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     private fun buildHeaderPanel(): JPanel {
         val panel = JPanel(BorderLayout())
-        panel.alignmentX = LEFT_ALIGNMENT
+        panel.alignmentX = Component.LEFT_ALIGNMENT
         panel.border = JBUI.Borders.empty(4, 4, 4, 4)
 
         val left = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
@@ -111,7 +127,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
     private fun buildClientConfigPanel(): JPanel {
         val panel = JPanel()
         panel.layout = BoxLayout(panel, BoxLayout.Y_AXIS)
-        panel.alignmentX = LEFT_ALIGNMENT
+        panel.alignmentX = Component.LEFT_ALIGNMENT
         panel.border = BorderFactory.createCompoundBorder(
             JBUI.Borders.customLine(JBColor.border(), 1, 0, 1, 0),
             JBUI.Borders.empty(6, 4, 6, 4)
@@ -119,7 +135,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
         val titleLabel = JBLabel("Client Configuration")
         titleLabel.font = titleLabel.font.deriveFont(Font.BOLD, JBUI.scale(12).toFloat())
-        titleLabel.alignmentX = LEFT_ALIGNMENT
+        titleLabel.alignmentX = Component.LEFT_ALIGNMENT
         panel.add(titleLabel)
         panel.add(Box.createVerticalStrut(JBUI.scale(4)))
 
@@ -134,7 +150,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
         panel.add(Box.createVerticalStrut(JBUI.scale(4)))
 
         val copyRow = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
-        copyRow.alignmentX = LEFT_ALIGNMENT
+        copyRow.alignmentX = Component.LEFT_ALIGNMENT
         copyRow.add(copyJsonButton)
         panel.add(copyRow)
 
@@ -146,7 +162,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     private fun buildTablePanel(): JPanel {
         val panel = JPanel(BorderLayout())
-        panel.alignmentX = LEFT_ALIGNMENT
+        panel.alignmentX = Component.LEFT_ALIGNMENT
 
         val titleLabel = JBLabel("Registered Tools (${toolNames.size})")
         titleLabel.font = titleLabel.font.deriveFont(Font.BOLD, JBUI.scale(12).toFloat())
@@ -190,7 +206,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     private fun buildFooterPanel(): JPanel {
         val panel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(4), 0))
-        panel.alignmentX = LEFT_ALIGNMENT
+        panel.alignmentX = Component.LEFT_ALIGNMENT
         footerLabel.foreground = JBColor.namedColor("Label.disabledForeground", JBColor.GRAY)
         footerLabel.font = footerLabel.font.deriveFont(JBUI.scale(11).toFloat())
         panel.add(footerLabel)
@@ -203,7 +219,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
 
     private fun buildActionPanel(): JPanel {
         val panel = JPanel(FlowLayout(FlowLayout.LEFT, JBUI.scale(8), 0))
-        panel.alignmentX = LEFT_ALIGNMENT
+        panel.alignmentX = Component.LEFT_ALIGNMENT
         panel.add(restartButton)
         panel.add(stopButton)
         panel.maximumSize = Dimension(Int.MAX_VALUE, panel.preferredSize.height)
@@ -232,7 +248,10 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
             Timer(1500) {
                 copyJsonButton.text = originalText
                 copyJsonButton.isEnabled = true
-            }.apply { isRepeats = false; start() }
+            }.apply {
+                isRepeats = false
+                start()
+            }
         }
 
         restartButton.addActionListener {
@@ -351,7 +370,9 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
         override fun getTableCellRendererComponent(
             table: JTable, value: Any?, isSelected: Boolean, hasFocus: Boolean, row: Int, column: Int
         ): Component {
-            val label = super.getTableCellRendererComponent(table, "", isSelected, hasFocus, row, column) as JLabel
+            val label = super.getTableCellRendererComponent(
+                table, "", isSelected, hasFocus, row, column
+            ) as JLabel
             val status = value as? String ?: ""
             when (status) {
                 "EXECUTING" -> {

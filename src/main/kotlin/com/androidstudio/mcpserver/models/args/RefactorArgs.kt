@@ -14,7 +14,7 @@ data class RefactorArgs(
     val endLine: Int? = null,
     val methodName: String? = null,
     val newParameters: List<ParameterChange>? = null,
-    val newReturnType: String? = null
+    val newReturnType: String? = null,
 )
 
 @Serializable
@@ -26,5 +26,5 @@ enum class RefactorOperation {
 data class ParameterChange(
     val name: String,
     val type: String,
-    val defaultValue: String? = null
+    val defaultValue: String? = null,
 )

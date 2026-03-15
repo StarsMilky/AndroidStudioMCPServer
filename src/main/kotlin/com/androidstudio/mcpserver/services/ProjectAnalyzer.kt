@@ -4,19 +4,43 @@ import com.androidstudio.mcpserver.errors.McpErrorCode
 import com.androidstudio.mcpserver.errors.ToolException
 import com.androidstudio.mcpserver.models.args.QueryProjectArgs
 import com.androidstudio.mcpserver.models.args.QueryProjectMode
-import com.androidstudio.mcpserver.models.results.*
+import com.androidstudio.mcpserver.models.results.ApiClass
+import com.androidstudio.mcpserver.models.results.ApiMethod
+import com.androidstudio.mcpserver.models.results.ApiSurface
+import com.androidstudio.mcpserver.models.results.ClassEntry
+import com.androidstudio.mcpserver.models.results.CycleInfo
+import com.androidstudio.mcpserver.models.results.FrameworkOverviewSummary
+import com.androidstudio.mcpserver.models.results.ImpactAnalysis
+import com.androidstudio.mcpserver.models.results.KeyClassInfo
+import com.androidstudio.mcpserver.models.results.ModuleInfo
+import com.androidstudio.mcpserver.models.results.ModuleStats
+import com.androidstudio.mcpserver.models.results.ProjectOverview
+import com.androidstudio.mcpserver.models.results.VariantInfo
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.roots.ProjectRootManager
-import com.intellij.psi.*
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifier
+import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtProperty
 
 object ProjectAnalyzer {
 
@@ -107,9 +131,12 @@ object ProjectAnalyzer {
         val allFiles = FilenameIndex.getAllFilesByExt(project, "kt", scope) +
             FilenameIndex.getAllFilesByExt(project, "java", scope)
 
-        var roomEntities = 0; var daos = 0
-        var hiltModules = 0; var retrofitServices = 0
-        var composables = 0; var navGraphs = 0
+        var roomEntities = 0
+        var daos = 0
+        var hiltModules = 0
+        var retrofitServices = 0
+        var composables = 0
+        var navGraphs = 0
 
         for (vf in allFiles) {
             val content = try { String(vf.contentsToByteArray()) } catch (_: Exception) { continue }

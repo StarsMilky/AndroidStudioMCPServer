@@ -9,7 +9,7 @@ data class SandboxArgs(
     val javaFile: String? = null,
     val inspectionScope: String? = null,
     val inspectionIds: List<String>? = null,
-    val dryRun: Boolean = true
+    val dryRun: Boolean = true,
 )
 
 @Serializable

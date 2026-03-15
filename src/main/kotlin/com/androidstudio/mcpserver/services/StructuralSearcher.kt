@@ -200,21 +200,19 @@ object StructuralSearcher {
         return GlobalSearchScope.projectScope(project)
     }
 
-    private fun patternToRegex(pattern: String): String {
-        return pattern
-            .replace("\\", "\\\\")
-            .replace(".", "\\.")
-            .replace("(", "\\(")
-            .replace(")", "\\)")
-            .replace("[", "\\[")
-            .replace("]", "\\]")
-            .replace("{", "\\{")
-            .replace("}", "\\}")
-            .replace("*", "\\*")
-            .replace("+", "\\+")
-            .replace("?", "\\?")
-            .replace("|", "\\|")
-            .replace("^", "\\^")
-            .replace(Regex("""\$\w+\$"""), "\\w+")
-    }
+    private fun patternToRegex(pattern: String): String = pattern
+        .replace("\\", "\\\\")
+        .replace(".", "\\.")
+        .replace("(", "\\(")
+        .replace(")", "\\)")
+        .replace("[", "\\[")
+        .replace("]", "\\]")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("*", "\\*")
+        .replace("+", "\\+")
+        .replace("?", "\\?")
+        .replace("|", "\\|")
+        .replace("^", "\\^")
+        .replace(Regex("""\$\w+\$"""), "\\w+")
 }

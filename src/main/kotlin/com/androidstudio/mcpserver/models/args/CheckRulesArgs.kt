@@ -8,5 +8,5 @@ data class CheckRulesArgs(val rules: List<ArchitectureRule>)
 data class ArchitectureRule(
     val name: String,
     val source: String,
-    val mustNotDependOn: List<String>
+    val mustNotDependOn: List<String>,
 )

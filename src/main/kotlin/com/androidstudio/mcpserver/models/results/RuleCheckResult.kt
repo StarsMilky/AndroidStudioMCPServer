@@ -7,7 +7,7 @@ data class RuleCheckResult(
     val failed: Int,
     val violations: List<RuleViolation>,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
@@ -17,5 +17,5 @@ data class RuleViolation(
     val illegalDependency: String,
     val file: String,
     val line: Int,
-    val suggestion: String? = null
+    val suggestion: String? = null,
 )

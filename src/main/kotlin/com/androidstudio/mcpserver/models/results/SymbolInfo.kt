@@ -7,7 +7,7 @@ data class SymbolInfo(
     val qualifiedType: String,
     val declarationFile: String,
     val declarationLine: Int,
-    val kind: SymbolKind
+    val kind: SymbolKind,
 )
 
 @Serializable

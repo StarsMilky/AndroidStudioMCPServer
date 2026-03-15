@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class QueryFrameworkArgs(
     val framework: FrameworkType,
-    val detailTarget: String? = null
+    val detailTarget: String? = null,
 )
 
 @Serializable

@@ -59,8 +59,6 @@ object RuleChecker {
         }
     }
 
-    private fun matchesGlob(text: String, pattern: String): Boolean {
-        val regex = pattern.replace(".", "\\.").replace("**", ".*").replace("*", "[^.]*")
-        return text.matches(Regex(regex))
-    }
+    private fun matchesGlob(text: String, pattern: String): Boolean =
+        text.matches(Regex(pattern.replace(".", "\\.").replace("**", ".*").replace("*", "[^.]*")))
 }

@@ -11,7 +11,7 @@ data class FindReferencesArgs(
     val scope: String = "project",
     val depth: Int = 3,
     val offset: Int = 0,
-    val limit: Int = 20
+    val limit: Int = 20,
 )
 
 @Serializable

@@ -9,11 +9,21 @@ import com.androidstudio.mcpserver.models.results.ScopeSymbol
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
-import com.intellij.psi.scope.PsiScopeProcessor
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiFile
+import com.intellij.psi.PsiCodeBlock
+import com.intellij.psi.PsiDeclarationStatement
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiLocalVariable
+import com.intellij.psi.PsiMethod
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.containingClassOrObject
+import org.jetbrains.kotlin.psi.KtBlockExpression
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
 
 object ScopeAnalyzer {
 
@@ -164,12 +174,11 @@ object ScopeAnalyzer {
         }
     }
 
-    private fun applyFilter(symbols: List<ScopeSymbol>, filter: ScopeFilter, targetKind: String?): List<ScopeSymbol> {
-        return when (filter) {
+    private fun applyFilter(symbols: List<ScopeSymbol>, filter: ScopeFilter, targetKind: String?): List<ScopeSymbol> =
+        when (filter) {
             ScopeFilter.ALL -> symbols
             ScopeFilter.VARIABLES -> symbols.filter { it.kind == "variable" || it.kind == "property" }
             ScopeFilter.METHODS -> symbols.filter { it.kind == "method" }
             ScopeFilter.TYPES -> symbols.filter { it.kind == "type" }
         }
-    }
 }

@@ -6,5 +6,5 @@ import kotlinx.serialization.Serializable
 data class ResolveSymbolArgs(
     val file: String,
     val line: Int,
-    val column: Int
+    val column: Int,
 )

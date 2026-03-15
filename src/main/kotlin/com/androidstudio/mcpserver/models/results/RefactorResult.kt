@@ -9,7 +9,7 @@ data class RefactorResult(
     val changesCount: Int,
     val preview: List<ChangePreview>? = null,
     val conflicts: List<String>? = null,
-    val checkpointLabel: String
+    val checkpointLabel: String,
 )
 
 @Serializable

@@ -12,7 +12,7 @@ data class FrameworkViewResult(
     val compose: ComposeView? = null,
     val navigation: NavigationView? = null,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
@@ -23,7 +23,7 @@ data class RoomView(
     val databases: List<RoomDatabase>,
     val entities: List<RoomEntity>,
     val daos: List<RoomDao>,
-    val migrations: List<RoomMigration>
+    val migrations: List<RoomMigration>,
 )
 
 @Serializable
@@ -36,7 +36,7 @@ data class RoomEntity(
     val fields: List<EntityField>,
     val primaryKey: List<String>,
     val indices: List<String>,
-    val relations: List<String>
+    val relations: List<String>,
 )
 
 @Serializable
@@ -63,7 +63,7 @@ data class RetrofitEndpoint(
     val path: String,
     val httpMethod: String,
     val returnType: String,
-    val parameters: List<EndpointParam>
+    val parameters: List<EndpointParam>,
 )
 
 @Serializable
@@ -73,7 +73,7 @@ data class EndpointParam(val name: String, val type: String, val annotation: Str
 data class HiltView(
     val modules: List<HiltModule>,
     val components: List<HiltComponent>,
-    val entryPoints: List<HiltEntryPoint>
+    val entryPoints: List<HiltEntryPoint>,
 )
 
 @Serializable
@@ -92,7 +92,7 @@ data class HiltEntryPoint(val name: String, val installedIn: String, val methods
 data class ComposeView(
     val composables: List<ComposableInfo>,
     val themes: List<ThemeInfo>,
-    val stateHolders: List<StateHolderInfo>
+    val stateHolders: List<StateHolderInfo>,
 )
 
 @Serializable
@@ -108,7 +108,7 @@ data class StateHolderInfo(val name: String, val stateType: String, val file: St
 data class NavigationView(
     val graphs: List<NavGraph>,
     val destinations: List<NavDestination>,
-    val deepLinks: List<NavDeepLink>
+    val deepLinks: List<NavDeepLink>,
 )
 
 @Serializable

@@ -8,7 +8,7 @@ data class QueryProjectArgs(
     val targetClass: String? = null,
     val changeType: ChangeType? = null,
     val maxHops: Int = 3,
-    val module: String? = null
+    val module: String? = null,
 )
 
 @Serializable

@@ -7,7 +7,7 @@ data class GetScopeArgs(
     val file: String,
     val line: Int,
     val column: Int,
-    val filter: ScopeFilter = ScopeFilter.ALL
+    val filter: ScopeFilter = ScopeFilter.ALL,
 )
 
 @Serializable

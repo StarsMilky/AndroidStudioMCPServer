@@ -9,7 +9,7 @@ data class ReferenceResult(
     val callHierarchy: CallNode? = null,
     val typeHierarchy: TypeHierarchyInfo? = null,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
@@ -17,7 +17,7 @@ data class UsageInfo(
     val file: String,
     val line: Int,
     val code: String,
-    val usageType: UsageType
+    val usageType: UsageType,
 )
 
 @Serializable
@@ -30,14 +30,14 @@ data class CallNode(
     val method: String,
     val file: String,
     val line: Int,
-    val children: List<CallNode> = emptyList()
+    val children: List<CallNode> = emptyList(),
 )
 
 @Serializable
 data class TypeHierarchyInfo(
     val target: String,
     val supers: List<String>,
-    val inheritors: List<InheritorInfo>
+    val inheritors: List<InheritorInfo>,
 )
 
 @Serializable

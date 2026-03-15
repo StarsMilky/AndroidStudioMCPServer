@@ -8,12 +8,12 @@ data class ScopeResult(
     val thisMembers: List<ScopeSymbol>,
     val extensionFunctions: List<ScopeSymbol>,
     val importedSymbols: List<ScopeSymbol>,
-    val truncated: Boolean = false
+    val truncated: Boolean = false,
 )
 
 @Serializable
 data class ScopeSymbol(
     val name: String,
     val type: String,
-    val kind: String
+    val kind: String,
 )

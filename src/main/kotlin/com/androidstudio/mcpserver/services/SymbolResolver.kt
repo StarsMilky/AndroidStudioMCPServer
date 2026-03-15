@@ -7,9 +7,25 @@ import com.androidstudio.mcpserver.models.results.SymbolKind
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
-import org.jetbrains.kotlin.psi.*
-import org.jetbrains.kotlin.psi.psiUtil.*
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiField
+import com.intellij.psi.PsiImportStatement
+import com.intellij.psi.PsiLocalVariable
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiPackage
+import com.intellij.psi.PsiPackageStatement
+import com.intellij.psi.PsiParameter
+import com.intellij.psi.PsiReference
+import com.intellij.psi.PsiVariable
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtProperty
 
 object SymbolResolver {
 

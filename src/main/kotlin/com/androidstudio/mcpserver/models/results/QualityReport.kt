@@ -6,7 +6,7 @@ data class QualityReport(
     val mode: String,
     val issues: List<QualityIssue>,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
@@ -17,5 +17,5 @@ data class QualityIssue(
     val line: Int? = null,
     val description: String,
     val suggestion: String? = null,
-    val metrics: Map<String, String>? = null
+    val metrics: Map<String, String>? = null,
 )

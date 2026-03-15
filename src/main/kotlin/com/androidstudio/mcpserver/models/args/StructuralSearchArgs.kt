@@ -7,5 +7,5 @@ data class StructuralSearchArgs(
     val fileType: String = "kotlin",
     val scope: String = "project",
     val typeConstraint: String? = null,
-    val limit: Int = 20
+    val limit: Int = 20,
 )

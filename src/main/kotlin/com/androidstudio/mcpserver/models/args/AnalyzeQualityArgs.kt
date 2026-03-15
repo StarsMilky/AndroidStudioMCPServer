@@ -6,7 +6,7 @@ data class AnalyzeQualityArgs(
     val mode: QualityMode,
     val scope: String = "project",
     val target: String? = null,
-    val topN: Int = 10
+    val topN: Int = 10,
 )
 
 @Serializable

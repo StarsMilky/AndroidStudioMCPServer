@@ -9,5 +9,5 @@ enum class McpErrorCode(val code: String, val message: String) {
     CONFLICT_DETECTED("conflict_detected", "File was modified during operation"),
     TIMEOUT("timeout", "Operation timed out"),
     PSI_ERROR("psi_error", "PSI analysis error"),
-    INVALID_SCOPE("invalid_scope", "Invalid scope parameter");
+    INVALID_SCOPE("invalid_scope", "Invalid scope parameter"),
 }

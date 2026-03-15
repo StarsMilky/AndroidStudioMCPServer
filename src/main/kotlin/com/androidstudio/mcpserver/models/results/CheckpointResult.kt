@@ -9,12 +9,12 @@ data class CheckpointResult(
     val entries: List<HistoryEntry>? = null,
     val diff: String? = null,
     val restoredFiles: Int? = null,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable
 data class HistoryEntry(
     val timestamp: String,
     val label: String?,
-    val sizeDelta: String
+    val sizeDelta: String,
 )

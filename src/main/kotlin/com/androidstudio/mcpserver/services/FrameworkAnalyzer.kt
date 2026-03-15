@@ -2,17 +2,50 @@ package com.androidstudio.mcpserver.services
 
 import com.androidstudio.mcpserver.models.args.FrameworkType
 import com.androidstudio.mcpserver.models.args.QueryFrameworkArgs
-import com.androidstudio.mcpserver.models.results.*
+import com.androidstudio.mcpserver.models.results.ComposableInfo
+import com.androidstudio.mcpserver.models.results.ComposeView
+import com.androidstudio.mcpserver.models.results.DaoMethod
+import com.androidstudio.mcpserver.models.results.EndpointParam
+import com.androidstudio.mcpserver.models.results.EntityField
+import com.androidstudio.mcpserver.models.results.FrameworkSummary
+import com.androidstudio.mcpserver.models.results.FrameworkViewResult
+import com.androidstudio.mcpserver.models.results.HiltComponent
+import com.androidstudio.mcpserver.models.results.HiltEntryPoint
+import com.androidstudio.mcpserver.models.results.HiltModule
+import com.androidstudio.mcpserver.models.results.HiltProvides
+import com.androidstudio.mcpserver.models.results.HiltView
+import com.androidstudio.mcpserver.models.results.NavArgument
+import com.androidstudio.mcpserver.models.results.NavDeepLink
+import com.androidstudio.mcpserver.models.results.NavDestination
+import com.androidstudio.mcpserver.models.results.NavGraph
+import com.androidstudio.mcpserver.models.results.NavigationView
+import com.androidstudio.mcpserver.models.results.RetrofitEndpoint
+import com.androidstudio.mcpserver.models.results.RetrofitInterface
+import com.androidstudio.mcpserver.models.results.RetrofitView
+import com.androidstudio.mcpserver.models.results.RoomDao
+import com.androidstudio.mcpserver.models.results.RoomDatabase
+import com.androidstudio.mcpserver.models.results.RoomEntity
+import com.androidstudio.mcpserver.models.results.RoomView
+import com.androidstudio.mcpserver.models.results.StateHolderInfo
+import com.androidstudio.mcpserver.models.results.ThemeInfo
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiAnnotation
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiClassObjectAccessExpression
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedFunction
 
 object FrameworkAnalyzer {
 

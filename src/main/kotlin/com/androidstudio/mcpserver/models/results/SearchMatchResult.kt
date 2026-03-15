@@ -6,7 +6,7 @@ data class SearchMatchResult(
     val total: Int,
     val matches: List<SearchMatch>,
     val truncated: Boolean = false,
-    val hint: String? = null
+    val hint: String? = null,
 )
 
 @Serializable

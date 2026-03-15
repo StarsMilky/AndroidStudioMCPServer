@@ -10,7 +10,7 @@ data class SandboxResult(
     val problemsFound: Int? = null,
     val problemsFixed: Int? = null,
     val unfixable: List<UnfixableItem>? = null,
-    val checkpointLabel: String? = null
+    val checkpointLabel: String? = null,
 )
 
 @Serializable

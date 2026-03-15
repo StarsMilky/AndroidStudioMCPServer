@@ -6,7 +6,7 @@ data class AnalyzeDataFlowArgs(
     val file: String,
     val line: Int,
     val column: Int,
-    val mode: DataFlowMode = DataFlowMode.NULLABILITY
+    val mode: DataFlowMode = DataFlowMode.NULLABILITY,
 )
 
 @Serializable

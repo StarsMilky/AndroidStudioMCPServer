@@ -7,12 +7,22 @@ import com.androidstudio.mcpserver.models.results.QualityReport
 import com.androidstudio.mcpserver.util.ProjectUtils
 import com.androidstudio.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.*
+import com.intellij.psi.PsiDocumentManager
+import com.intellij.psi.PsiJavaFile
+import com.intellij.psi.PsiManager
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiModifier
+import com.intellij.psi.PsiTryStatement
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtProperty
+import org.jetbrains.kotlin.psi.KtTryExpression
 
 object QualityAnalyzer {
     fun analyze(project: Project, args: AnalyzeQualityArgs): QualityReport {
@@ -124,9 +134,8 @@ object QualityAnalyzer {
         return maxOf(1, complexity)
     }
 
-    private fun countOccurrences(text: String, pattern: String): Int {
-        return try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
-    }
+    private fun countOccurrences(text: String, pattern: String): Int =
+        try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
 
     private fun analyzeDeadCode(project: Project, args: AnalyzeQualityArgs): QualityReport {
         val issues = mutableListOf<QualityIssue>()
