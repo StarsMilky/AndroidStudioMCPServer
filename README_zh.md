@@ -1,4 +1,4 @@
-# Android Studio MCP - Code Intelligence
+# MCP Code Intelligence
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -82,7 +82,7 @@ cd android-studio-mcpserver
 ```json
 {
   "mcpServers": {
-    "android-studio-code-intel": {
+    "mcp-code-intel": {
       "url": "http://127.0.0.1:17532/mcp"
     }
   }

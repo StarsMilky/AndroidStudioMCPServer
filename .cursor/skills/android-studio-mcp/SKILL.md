@@ -1,8 +1,8 @@
 ---
-name: android-studio-mcp
+name: mcp-code-intel
 description: >
-  Use when working on Android/Kotlin/Java projects with the android-studio-mcp
-  (or android-studio-code-intel) MCP server connected. Triggers on: any code
+  Use when working on Android/Kotlin/Java projects with the mcp-code-intel
+  MCP server connected. Triggers on: any code
   analysis, refactoring, symbol lookup, reference search, project overview,
   framework query (Room/Retrofit/Hilt/Compose/Navigation), data flow analysis,
   quality check, structural search, checkpoint management, decompile, J2K
@@ -12,7 +12,7 @@ description: >
 always-apply: false
 ---
 
-# Android Studio MCP — Code Intelligence
+# MCP Code Intelligence
 
 12 IDE-level tools for AI agents. **Always prefer these over CLI equivalents.**
 

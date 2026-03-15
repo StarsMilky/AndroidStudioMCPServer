@@ -181,9 +181,9 @@ class McpServerManager : Disposable {
 
     companion object {
         const val DEFAULT_PORT = 17532
-        const val PORT_FILE_NAME = ".android-studio-mcp-code-intel.json"
+        const val PORT_FILE_NAME = ".mcp-code-intel.json"
         const val MAX_PORT_ATTEMPTS = 10
-        const val MCP_SERVER_ENTRY_NAME = "android-studio-code-intel"
+        const val MCP_SERVER_ENTRY_NAME = "mcp-code-intel"
 
         fun getInstance(): McpServerManager =
             ApplicationManager.getApplication().getService(McpServerManager::class.java)

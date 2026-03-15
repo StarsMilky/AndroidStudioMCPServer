@@ -1,1 +1,1 @@
-rootProject.name = "AndroidStudioMCPServer"
+rootProject.name = "MCPCodeIntelligence"

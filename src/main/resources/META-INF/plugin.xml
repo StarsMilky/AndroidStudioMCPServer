@@ -1,5 +1,5 @@
 <idea-plugin url="https://github.com/StarsMilky/AndroidStudioMCPServer">
-    <id>com.androidstudio.mcpserver.AndroidStudioMCPServer</id>
+    <id>com.androidstudio.mcpserver.MCPCodeIntelligence</id>
     <name>MCP Code Intelligence</name>
     <vendor url="https://github.com/StarsMilky" email="starsmilky@users.noreply.github.com">StarsMilky</vendor>
 
