@@ -4,9 +4,36 @@
     <vendor url="https://github.com/StarsMilky">StarsMilky</vendor>
 
     <description><![CDATA[
-        12 IDE-level code intelligence tools for AI agents via MCP protocol.
-        Provides symbol resolution, reference finding, refactoring, project analysis,
-        framework views, data flow analysis, quality metrics, checkpoints, and more.
+<p><b>Android Studio MCP – Code Intelligence</b> exposes <b>12 IDE-level semantic analysis tools</b>
+to AI agents through the <a href="https://modelcontextprotocol.io/">Model Context Protocol (MCP)</a>.</p>
+
+<p>Instead of relying on <code>grep</code> and file reads, AI agents get direct access to the same
+understanding Android Studio uses internally — type resolution, reference graphs, call hierarchies,
+data flow analysis, and safe cross-language refactoring.</p>
+
+<h3>Tools</h3>
+<ul>
+  <li><b>resolve_symbol</b> — Fully-qualified type, declaration location, and symbol kind at any position</li>
+  <li><b>find_references</b> — Semantic usages, callers, callees, and type hierarchy (zero false positives)</li>
+  <li><b>get_scope</b> — All visible symbols: locals, members, extensions, imports</li>
+  <li><b>query_project</b> — Project overview, dependency graph, API surface, build variants</li>
+  <li><b>query_framework</b> — Room / Retrofit / Hilt / Compose / Navigation structural views</li>
+  <li><b>analyze_data_flow</b> — Nullability inference, forward/backward value propagation</li>
+  <li><b>analyze_quality</b> — Complexity hotspots, dead code, clones, error handling</li>
+  <li><b>check_rules</b> — Custom architecture dependency rules validation</li>
+  <li><b>structural_search</b> — AST-based pattern search with IntelliJ SSR syntax</li>
+  <li><b>refactor</b> — Rename, move, extract, safe delete, change signature across Java/Kotlin/XML</li>
+  <li><b>checkpoint</b> — Create, list, rollback, and diff IDE Local History snapshots</li>
+  <li><b>sandbox</b> — Decompile library classes, Java-to-Kotlin conversion, batch inspections</li>
+</ul>
+
+<h3>Highlights</h3>
+<ul>
+  <li>Embedded Ktor HTTP server with Streamable MCP transport — zero external dependencies</li>
+  <li>One-click Cursor configuration from the built-in Tool Window</li>
+  <li>Per-tool metrics: invocation count, token usage, execution time</li>
+  <li>Supports both K1 and K2 Kotlin compilers</li>
+</ul>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

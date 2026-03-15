@@ -114,11 +114,11 @@ object ClientAutoConfigurator {
 
             configFile.writeText(prettyJson.encodeToString(JsonObject.serializer(), updatedConfig))
 
-            val message = "$clientName 配置已更新: $entryName → $serverUrl"
+            val message = "$clientName config updated: $entryName → $serverUrl"
             log.info(message)
             return ConfigResult(true, configFile.absolutePath, message)
         } catch (e: Exception) {
-            val message = "配置 $clientName 失败: ${e.message}"
+            val message = "Failed to configure $clientName: ${e.message}"
             log.error(message, e)
             return ConfigResult(false, configFile.absolutePath, message)
         }
@@ -126,14 +126,14 @@ object ClientAutoConfigurator {
 
     fun showResultNotification(result: ConfigResult) {
         val type = if (result.success) NotificationType.INFORMATION else NotificationType.ERROR
-        val title = if (result.success) "MCP 客户端已配置" else "MCP 客户端配置失败"
+        val title = if (result.success) "MCP Client Configured" else "MCP Client Configuration Failed"
 
         val notification = NotificationGroupManager.getInstance()
             .getNotificationGroup("MCP Code Intelligence")
             .createNotification(title, result.message, type)
 
         if (result.success) {
-            notification.addAction(object : com.intellij.notification.NotificationAction("打开配置文件") {
+            notification.addAction(object : com.intellij.notification.NotificationAction("Open Config File") {
                 override fun actionPerformed(
                     e: com.intellij.openapi.actionSystem.AnActionEvent,
                     notification: com.intellij.notification.Notification

@@ -32,56 +32,56 @@ object ToolSchemas {
 
     val resolveSymbol = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("文件路径（相对于项目根目录）"))
-            put("line", intProp("行号（1-based）"))
-            put("column", intProp("列号（1-based）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("file", stringProp("File path (relative to project root)"))
+            put("line", intProp("Line number (1-based)"))
+            put("column", intProp("Column number (1-based)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("file", "line", "column")
     )
 
     val findReferences = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("文件路径（相对于项目根目录）"))
-            put("line", intProp("行号（1-based）"))
-            put("column", intProp("列号（1-based）"))
+            put("file", stringProp("File path (relative to project root)"))
+            put("line", intProp("Line number (1-based)"))
+            put("column", intProp("Column number (1-based)"))
             put(
                 "mode",
                 enumProp(
-                    "查询模式",
+                    "Query mode",
                     listOf("USAGES", "CALLERS", "CALLEES", "TYPE_HIERARCHY")
                 )
             )
             put(
                 "scope",
-                stringProp("搜索范围：project（默认）或 module:模块名")
+                stringProp("Search scope: project (default) or module:<name>")
             )
-            put("depth", intProp("调用层级深度（默认 3）"))
-            put("offset", intProp("分页偏移量（默认 0）"))
-            put("limit", intProp("分页大小（默认 20）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("depth", intProp("Call hierarchy depth (default 3)"))
+            put("offset", intProp("Pagination offset (default 0)"))
+            put("limit", intProp("Page size (default 20)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("file", "line", "column")
     )
 
     val getScope = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("文件路径（相对于项目根目录）"))
-            put("line", intProp("行号（1-based）"))
-            put("column", intProp("列号（1-based）"))
-            put("filter", enumProp("过滤类型", listOf("ALL", "VARIABLES", "METHODS", "TYPES")))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("file", stringProp("File path (relative to project root)"))
+            put("line", intProp("Line number (1-based)"))
+            put("column", intProp("Column number (1-based)"))
+            put("filter", enumProp("Filter type", listOf("ALL", "VARIABLES", "METHODS", "TYPES")))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("file", "line", "column")
     )
 
     val checkpoint = ToolSchema(
         properties = buildJsonObject {
-            put("operation", enumProp("操作类型", listOf("CREATE", "HISTORY", "ROLLBACK", "DIFF")))
-            put("label", stringProp("检查点标签（CREATE/ROLLBACK 时使用）"))
-            put("file", stringProp("目标文件路径（HISTORY/DIFF 时使用）"))
-            put("target_label", stringProp("目标检查点标签（DIFF 时使用）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("operation", enumProp("Operation type", listOf("CREATE", "HISTORY", "ROLLBACK", "DIFF")))
+            put("label", stringProp("Checkpoint label (used with CREATE/ROLLBACK)"))
+            put("file", stringProp("Target file path (used with HISTORY/DIFF)"))
+            put("target_label", stringProp("Target checkpoint label (used with DIFF)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("operation")
     )
@@ -91,32 +91,32 @@ object ToolSchemas {
             put(
                 "operation",
                 enumProp(
-                    "重构类型",
+                    "Refactoring type",
                     listOf("RENAME", "MOVE", "EXTRACT", "SAFE_DELETE", "CHANGE_SIGNATURE")
                 )
             )
-            put("file", stringProp("目标文件路径"))
-            put("line", intProp("行号（1-based）"))
-            put("column", intProp("列号（1-based）"))
-            put("new_name", stringProp("新名称（RENAME 时必需）"))
-            put("target_package", stringProp("目标包名（MOVE 时必需）"))
-            put("start_line", intProp("提取代码起始行（EXTRACT 时必需）"))
-            put("end_line", intProp("提取代码结束行（EXTRACT 时必需）"))
-            put("method_name", stringProp("新方法名（EXTRACT 时必需）"))
+            put("file", stringProp("Target file path"))
+            put("line", intProp("Line number (1-based)"))
+            put("column", intProp("Column number (1-based)"))
+            put("new_name", stringProp("New name (required for RENAME)"))
+            put("target_package", stringProp("Target package (required for MOVE)"))
+            put("start_line", intProp("Start line for extraction (required for EXTRACT)"))
+            put("end_line", intProp("End line for extraction (required for EXTRACT)"))
+            put("method_name", stringProp("New method name (required for EXTRACT)"))
             put("new_parameters", buildJsonObject {
                 put("type", "array")
-                put("description", "新参数列表（CHANGE_SIGNATURE 时使用）")
+                put("description", "New parameter list (used with CHANGE_SIGNATURE)")
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        put("name", stringProp("参数名"))
-                        put("type", stringProp("参数类型"))
-                        put("default_value", stringProp("默认值（可选）"))
+                        put("name", stringProp("Parameter name"))
+                        put("type", stringProp("Parameter type"))
+                        put("default_value", stringProp("Default value (optional)"))
                     }
                 }
             })
-            put("new_return_type", stringProp("新返回类型（CHANGE_SIGNATURE 时使用）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("new_return_type", stringProp("New return type (used with CHANGE_SIGNATURE)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("operation", "file")
     )
@@ -126,24 +126,24 @@ object ToolSchemas {
             put(
                 "mode",
                 enumProp(
-                    "查询模式",
+                    "Query mode",
                     listOf("OVERVIEW", "DEPENDENCY", "API_SURFACE", "VARIANT")
                 )
             )
             put(
                 "target_class",
-                stringProp("目标类全限定名（DEPENDENCY 时使用）")
+                stringProp("Target class FQN (used with DEPENDENCY)")
             )
             put(
                 "change_type",
                 enumProp(
-                    "变更类型",
+                    "Change type",
                     listOf("SIGNATURE_CHANGE", "BEHAVIOR_CHANGE", "DELETE")
                 )
             )
-            put("max_hops", intProp("依赖传播深度（默认 3）"))
-            put("module", stringProp("指定模块（VARIANT/API_SURFACE 时使用）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("max_hops", intProp("Dependency propagation depth (default 3)"))
+            put("module", stringProp("Module name (used with VARIANT/API_SURFACE)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = emptyList()
     )
@@ -153,29 +153,29 @@ object ToolSchemas {
             put(
                 "framework",
                 enumProp(
-                    "框架类型",
+                    "Framework type",
                     listOf("ROOM", "RETROFIT", "HILT", "COMPOSE", "NAVIGATION")
                 )
             )
-            put("detail_target", stringProp("详情目标名称（如实体名、接口名）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("detail_target", stringProp("Detail target name (e.g. entity or interface name)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("framework")
     )
 
     val analyzeDataFlow = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("文件路径（相对于项目根目录）"))
-            put("line", intProp("行号（1-based）"))
-            put("column", intProp("列号（1-based）"))
+            put("file", stringProp("File path (relative to project root)"))
+            put("line", intProp("Line number (1-based)"))
+            put("column", intProp("Column number (1-based)"))
             put(
                 "mode",
                 enumProp(
-                    "分析模式",
+                    "Analysis mode",
                     listOf("NULLABILITY", "FORWARD", "BACKWARD", "EXTERNAL_ANNOTATIONS")
                 )
             )
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("file", "line", "column")
     )
@@ -184,15 +184,15 @@ object ToolSchemas {
         properties = buildJsonObject {
             put("rules", buildJsonObject {
                 put("type", "array")
-                put("description", "架构规则列表")
+                put("description", "Architecture rules list")
                 putJsonObject("items") {
                     put("type", "object")
                     putJsonObject("properties") {
-                        put("name", stringProp("规则名称"))
-                        put("source", stringProp("源包/模块"))
+                        put("name", stringProp("Rule name"))
+                        put("source", stringProp("Source package/module"))
                         put("must_not_depend_on", buildJsonObject {
                             put("type", "array")
-                            put("description", "禁止依赖的包/模块列表")
+                            put("description", "Forbidden dependency packages/modules")
                             putJsonObject("items") { put("type", "string") }
                         })
                     }
@@ -203,19 +203,19 @@ object ToolSchemas {
                     }
                 }
             })
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("rules")
     )
 
     val structuralSearch = ToolSchema(
         properties = buildJsonObject {
-            put("pattern", stringProp("IntelliJ SSR 搜索模式（如 \"\$T\$ \$v\$ = new Thread()\"）"))
-            put("file_type", enumProp("文件类型", listOf("kotlin", "java", "xml", "all")))
-            put("scope", stringProp("搜索范围：project（默认）或 module:模块名"))
-            put("type_constraint", stringProp("类型约束（可选）"))
-            put("limit", intProp("结果数量上限（默认 20）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("pattern", stringProp("IntelliJ SSR search pattern (e.g. \"\$T\$ \$v\$ = new Thread()\")"))
+            put("file_type", enumProp("File type", listOf("kotlin", "java", "xml", "all")))
+            put("scope", stringProp("Search scope: project (default) or module:<name>"))
+            put("type_constraint", stringProp("Type constraint (optional)"))
+            put("limit", intProp("Max results (default 20)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("pattern")
     )
@@ -225,32 +225,32 @@ object ToolSchemas {
             put(
                 "mode",
                 enumProp(
-                    "分析模式",
+                    "Analysis mode",
                     listOf("COMPLEXITY", "DEAD_CODE", "CLONES", "PATTERNS", "ERROR_HANDLING")
                 )
             )
-            put("scope", stringProp("分析范围：project（默认）或 module:模块名"))
-            put("target", stringProp("目标类/包（可选，缩小范围）"))
-            put("top_n", intProp("返回 Top N 结果（默认 10）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("scope", stringProp("Analysis scope: project (default) or module:<name>"))
+            put("target", stringProp("Target class/package (optional, narrows scope)"))
+            put("top_n", intProp("Return top N results (default 10)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("mode")
     )
 
     val sandbox = ToolSchema(
         properties = buildJsonObject {
-            put("operation", enumProp("沙盒操作", listOf("DECOMPILE", "CONVERT_J2K", "BATCH_FIX")))
-            put("timeout", intProp("超时秒数（默认 30）"))
-            put("qualified_class_name", stringProp("全限定类名（DECOMPILE 时使用）"))
-            put("java_file", stringProp("Java 文件路径（CONVERT_J2K 时使用）"))
-            put("inspection_scope", stringProp("检查范围（BATCH_FIX 时使用）"))
+            put("operation", enumProp("Sandbox operation", listOf("DECOMPILE", "CONVERT_J2K", "BATCH_FIX")))
+            put("timeout", intProp("Timeout in seconds (default 30)"))
+            put("qualified_class_name", stringProp("Fully-qualified class name (used with DECOMPILE)"))
+            put("java_file", stringProp("Java file path (used with CONVERT_J2K)"))
+            put("inspection_scope", stringProp("Inspection scope (used with BATCH_FIX)"))
             put("inspection_ids", buildJsonObject {
                 put("type", "array")
-                put("description", "Inspection ID 列表（BATCH_FIX 时使用）")
+                put("description", "Inspection ID list (used with BATCH_FIX)")
                 putJsonObject("items") { put("type", "string") }
             })
-            put("dry_run", boolProp("试运行模式（BATCH_FIX 时使用，默认 true）"))
-            put("project_path", stringProp("项目路径（多项目时指定，可选）"))
+            put("dry_run", boolProp("Dry run mode (used with BATCH_FIX, default true)"))
+            put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
         required = listOf("operation")
     )

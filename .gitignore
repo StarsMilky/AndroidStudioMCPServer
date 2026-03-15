@@ -50,3 +50,6 @@ bin/
 eval/
 docs/
 tests/
+signing/
+token.txt
+marketplace-zip-signer-cli*.jar

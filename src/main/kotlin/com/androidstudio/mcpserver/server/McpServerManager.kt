@@ -189,18 +189,18 @@ class McpServerManager : Disposable {
             ApplicationManager.getApplication().getService(McpServerManager::class.java)
 
         val TOOL_REGISTRY = listOf(
-            ToolInfo("resolve_symbol", "精确解析代码中任意位置的符号"),
-            ToolInfo("find_references", "语义级查找符号的引用/调用层级/类型层级"),
-            ToolInfo("get_scope", "获取指定代码位置的所有可用符号"),
-            ToolInfo("checkpoint", "Local History 操作——创建检查点、查看历史、回滚"),
-            ToolInfo("refactor", "语义级安全重构（rename/move/extract/safe_delete）"),
-            ToolInfo("query_project", "项目全景图、依赖关系图、API 表面分析"),
-            ToolInfo("query_framework", "Room/Retrofit/Hilt/Compose/Navigation 框架视图"),
-            ToolInfo("analyze_data_flow", "数据流分析——空安全推理、值传播追踪"),
-            ToolInfo("check_rules", "验证代码是否遵守自定义架构规则"),
-            ToolInfo("structural_search", "基于 AST 的代码模式搜索"),
-            ToolInfo("analyze_quality", "代码质量分析——复杂度热点、死代码"),
-            ToolInfo("sandbox", "安全沙盒——反编译、J2K 转换、批量修复"),
+            ToolInfo("resolve_symbol", "Resolve symbol at any code position"),
+            ToolInfo("find_references", "Semantic reference search with call/type hierarchy"),
+            ToolInfo("get_scope", "List all visible symbols at a code position"),
+            ToolInfo("checkpoint", "Local History: create checkpoint, view history, rollback"),
+            ToolInfo("refactor", "Semantic-safe refactoring (rename/move/extract/safe_delete)"),
+            ToolInfo("query_project", "Project overview, dependency graph, API surface analysis"),
+            ToolInfo("query_framework", "Room/Retrofit/Hilt/Compose/Navigation framework views"),
+            ToolInfo("analyze_data_flow", "Data flow analysis: nullability inference, value tracing"),
+            ToolInfo("check_rules", "Validate code against custom architecture rules"),
+            ToolInfo("structural_search", "AST-based code pattern search"),
+            ToolInfo("analyze_quality", "Code quality: complexity hotspots, dead code"),
+            ToolInfo("sandbox", "Sandbox: decompile, J2K conversion, batch fix"),
         )
     }
 }

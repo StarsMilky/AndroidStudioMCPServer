@@ -106,7 +106,7 @@ object ToolRegistrar {
     private fun registerResolveSymbol(server: Server) {
         server.addTool(
             name = "resolve_symbol",
-            description = "精确解析代码中任意位置的符号：返回全限定类型、声明位置、符号类别",
+            description = "Resolve symbol at any code position: returns fully-qualified type, declaration location, and symbol kind",
             inputSchema = ToolSchemas.resolveSymbol
         ) { request ->
             handleTool(
@@ -124,7 +124,7 @@ object ToolRegistrar {
     private fun registerFindReferences(server: Server) {
         server.addTool(
             name = "find_references",
-            description = "语义级查找符号的引用/调用层级/类型层级（零误报，区分引用类型）",
+            description = "Semantic reference search: usages, call hierarchy, callees, and type hierarchy (zero false positives)",
             inputSchema = ToolSchemas.findReferences
         ) { request ->
             handleTool(
@@ -142,7 +142,7 @@ object ToolRegistrar {
     private fun registerGetScope(server: Server) {
         server.addTool(
             name = "get_scope",
-            description = "获取指定代码位置的所有可用符号（局部变量、成员、扩展函数、导入符号）",
+            description = "List all visible symbols at a code position (locals, members, extensions, imports)",
             inputSchema = ToolSchemas.getScope
         ) { request ->
             handleTool(
@@ -160,7 +160,7 @@ object ToolRegistrar {
     private fun registerCheckpoint(server: Server) {
         server.addTool(
             name = "checkpoint",
-            description = "Local History 操作——创建检查点、查看历史、回滚、对比差异",
+            description = "Local History operations: create checkpoint, view history, rollback, diff",
             inputSchema = ToolSchemas.checkpoint
         ) { request ->
             handleTool(
@@ -184,8 +184,7 @@ object ToolRegistrar {
     private fun registerRefactor(server: Server) {
         server.addTool(
             name = "refactor",
-            description = "语义级安全重构（rename/move/extract/safe_delete/change_signature），"
-                + "跨 Java/Kotlin/XML/Manifest",
+            description = "Semantic-safe refactoring (rename/move/extract/safe_delete/change_signature) across Java/Kotlin/XML/Manifest",
             inputSchema = ToolSchemas.refactor
         ) { request ->
             handleTool(
@@ -203,7 +202,7 @@ object ToolRegistrar {
     private fun registerQueryProject(server: Server) {
         server.addTool(
             name = "query_project",
-            description = "项目全景图、依赖关系图、变更影响分析、API 表面分析、Build Variant 感知",
+            description = "Project overview, dependency graph, change impact analysis, API surface, build variants",
             inputSchema = ToolSchemas.queryProject
         ) { request ->
             val toolName = "query_project"
@@ -250,7 +249,7 @@ object ToolRegistrar {
     private fun registerQueryFramework(server: Server) {
         server.addTool(
             name = "query_framework",
-            description = "基于注解扫描生成 Room/Retrofit/Hilt/Compose/Navigation 的结构化框架视图",
+            description = "Annotation-based structural views for Room/Retrofit/Hilt/Compose/Navigation",
             inputSchema = ToolSchemas.queryFramework
         ) { request ->
             val toolName = "query_framework"
@@ -297,7 +296,7 @@ object ToolRegistrar {
     private fun registerAnalyzeDataFlow(server: Server) {
         server.addTool(
             name = "analyze_data_flow",
-            description = "数据流分析——空安全推理、值传播追踪、外部注解查询",
+            description = "Data flow analysis: nullability inference, value propagation tracing, external annotations",
             inputSchema = ToolSchemas.analyzeDataFlow
         ) { request ->
             handleTool(
@@ -315,7 +314,7 @@ object ToolRegistrar {
     private fun registerCheckRules(server: Server) {
         server.addTool(
             name = "check_rules",
-            description = "验证代码是否遵守自定义架构规则（层级违规、非法依赖）",
+            description = "Validate code against custom architecture rules (layer violations, illegal dependencies)",
             inputSchema = ToolSchemas.checkRules
         ) { request ->
             handleTool(
@@ -333,7 +332,7 @@ object ToolRegistrar {
     private fun registerStructuralSearch(server: Server) {
         server.addTool(
             name = "structural_search",
-            description = "基于 AST 的代码模式搜索（IntelliJ SSR 语法），超越文本搜索",
+            description = "AST-based code pattern search using IntelliJ SSR syntax, beyond text search",
             inputSchema = ToolSchemas.structuralSearch
         ) { request ->
             handleTool(
@@ -351,7 +350,7 @@ object ToolRegistrar {
     private fun registerAnalyzeQuality(server: Server) {
         server.addTool(
             name = "analyze_quality",
-            description = "代码质量分析——复杂度热点、死代码、代码克隆、设计模式/反模式、异常处理",
+            description = "Code quality analysis: complexity hotspots, dead code, clones, patterns, error handling",
             inputSchema = ToolSchemas.analyzeQuality
         ) { request ->
             handleTool(
@@ -369,7 +368,7 @@ object ToolRegistrar {
     private fun registerSandbox(server: Server) {
         server.addTool(
             name = "sandbox",
-            description = "安全沙盒——反编译查看源码、Java→Kotlin 转换、批量修复（如移除无用 import）",
+            description = "Sandbox: decompile library source, Java-to-Kotlin conversion, batch inspections",
             inputSchema = ToolSchemas.sandbox
         ) { request ->
             handleTool(
