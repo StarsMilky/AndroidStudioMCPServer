@@ -59,8 +59,10 @@ object ScopeAnalyzer {
         while (current != null) {
             when (current) {
                 is PsiCodeBlock -> {
-                    current.statements.filterIsInstance<PsiDeclarationStatement>().forEach { decl ->
-                        decl.declaredElements.filterIsInstance<PsiLocalVariable>().forEach { variable ->
+                    current.statements.filterIsInstance<PsiDeclarationStatement>()
+                        .forEach { decl ->
+                        decl.declaredElements.filterIsInstance<PsiLocalVariable>()
+                            .forEach { variable ->
                             result.add(ScopeSymbol(
                                 name = variable.name,
                                 type = variable.type.canonicalText,
@@ -155,7 +157,11 @@ object ScopeAnalyzer {
             }
             is KtFile -> psiFile.importDirectives.forEach { imp ->
                 val name = imp.importedFqName?.shortName()?.asString() ?: return@forEach
-                result.add(ScopeSymbol(name = name, type = imp.importedFqName?.asString() ?: "", kind = "type"))
+                result.add(ScopeSymbol(
+                    name = name,
+                    type = imp.importedFqName?.asString() ?: "",
+                    kind = "type"
+                ))
             }
         }
     }
@@ -166,7 +172,8 @@ object ScopeAnalyzer {
                 if (func.receiverTypeReference != null) {
                     result.add(ScopeSymbol(
                         name = func.name ?: return@forEach,
-                        type = "${func.receiverTypeReference?.text}.() -> ${func.typeReference?.text ?: "Unit"}",
+                        type = "${func.receiverTypeReference?.text}.() -> " +
+                            "${func.typeReference?.text ?: "Unit"}",
                         kind = "method"
                     ))
                 }
@@ -174,10 +181,15 @@ object ScopeAnalyzer {
         }
     }
 
-    private fun applyFilter(symbols: List<ScopeSymbol>, filter: ScopeFilter, targetKind: String?): List<ScopeSymbol> =
+    private fun applyFilter(
+        symbols: List<ScopeSymbol>,
+        filter: ScopeFilter,
+        targetKind: String?
+    ): List<ScopeSymbol> =
         when (filter) {
             ScopeFilter.ALL -> symbols
-            ScopeFilter.VARIABLES -> symbols.filter { it.kind == "variable" || it.kind == "property" }
+            ScopeFilter.VARIABLES ->
+                symbols.filter { it.kind == "variable" || it.kind == "property" }
             ScopeFilter.METHODS -> symbols.filter { it.kind == "method" }
             ScopeFilter.TYPES -> symbols.filter { it.kind == "type" }
         }

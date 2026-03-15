@@ -48,7 +48,11 @@ object DataFlowAnalyzer {
         }
     }
 
-    private fun analyzeNullability(project: Project, element: PsiElement, psiFile: PsiFile): DataFlowResult {
+    private fun analyzeNullability(
+        project: Project,
+        element: PsiElement,
+        psiFile: PsiFile
+    ): DataFlowResult {
         val javaVar = element.parent as? PsiVariable
         if (javaVar != null) {
             return analyzeJavaNullability(project, javaVar)
@@ -77,7 +81,8 @@ object DataFlowAnalyzer {
 
         return DataFlowResult(
             nullability = "unknown",
-            reason = "Unable to determine nullability: element type is ${element.javaClass.simpleName}"
+            reason = "Unable to determine nullability: element type is " +
+                element.javaClass.simpleName
         )
     }
 
@@ -103,9 +108,13 @@ object DataFlowAnalyzer {
 
         val usages = ReferencesSearch.search(variable).findAll()
         for (ref in usages.take(20)) {
-            val assignExpr = PsiTreeUtil.getParentOfType(ref.element, PsiAssignmentExpression::class.java)
+            val assignExpr = PsiTreeUtil.getParentOfType(
+                ref.element,
+                PsiAssignmentExpression::class.java
+            )
             if (assignExpr != null && assignExpr.rExpression?.text == "null") {
-                val doc = PsiDocumentManager.getInstance(project).getDocument(ref.element.containingFile)
+                val doc = PsiDocumentManager.getInstance(project)
+                    .getDocument(ref.element.containingFile)
                 val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
                 nullPaths.add("assigned null at line $line")
             }
@@ -122,12 +131,16 @@ object DataFlowAnalyzer {
 
         return DataFlowResult(
             nullability = nullability,
-            reason = "Java type: ${type.canonicalText}, annotations: ${annotations.map { it.qualifiedName }}",
+            reason = "Java type: ${type.canonicalText}, annotations: " +
+                annotations.map { it.qualifiedName },
             nullPaths = nullPaths.ifEmpty { null }
         )
     }
 
-    private fun analyzeKotlinPropertyNullability(project: Project, prop: KtProperty): DataFlowResult {
+    private fun analyzeKotlinPropertyNullability(
+        project: Project,
+        prop: KtProperty
+    ): DataFlowResult {
         val typeText = prop.typeReference?.text
         val initializer = prop.initializer
 
@@ -142,9 +155,11 @@ object DataFlowAnalyzer {
             val usages = ReferencesSearch.search(prop).findAll()
             for (ref in usages.take(20)) {
                 val parent = ref.element.parent
-                if (parent is KtBinaryExpression && parent.operationToken == org.jetbrains.kotlin.lexer.KtTokens.EQ) {
+                if (parent is KtBinaryExpression &&
+                    parent.operationToken == org.jetbrains.kotlin.lexer.KtTokens.EQ) {
                     if (parent.right?.text == "null") {
-                        val doc = PsiDocumentManager.getInstance(project).getDocument(ref.element.containingFile)
+                        val doc = PsiDocumentManager.getInstance(project)
+                    .getDocument(ref.element.containingFile)
                         val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
                         nullPaths.add("assigned null at line $line")
                     }
@@ -165,7 +180,11 @@ object DataFlowAnalyzer {
             else -> "unknown"
         }
 
-        val inferredType = typeText ?: (if (initializer != null) "inferred from: ${initializer.text.take(50)}" else "unknown")
+        val inferredType = typeText
+            ?: (if (initializer != null)
+                "inferred from: ${initializer.text.take(50)}"
+            else
+                "unknown")
 
         return DataFlowResult(
             nullability = nullability,
@@ -174,7 +193,10 @@ object DataFlowAnalyzer {
         )
     }
 
-    private fun analyzeResolvedNullability(project: Project, resolved: PsiElement): DataFlowResult {
+    private fun analyzeResolvedNullability(
+        project: Project,
+        resolved: PsiElement
+    ): DataFlowResult {
         return when (resolved) {
             is PsiVariable -> analyzeJavaNullability(project, resolved)
             is KtProperty -> analyzeKotlinPropertyNullability(project, resolved)
@@ -192,7 +214,11 @@ object DataFlowAnalyzer {
         }
     }
 
-    private fun analyzeForward(project: Project, element: PsiElement, psiFile: PsiFile): DataFlowResult {
+    private fun analyzeForward(
+        project: Project,
+        element: PsiElement,
+        psiFile: PsiFile
+    ): DataFlowResult {
         val target = element.parent?.reference?.resolve()
             ?: element.reference?.resolve()
             ?: PsiTreeUtil.getParentOfType(element, PsiNamedElement::class.java)
@@ -228,7 +254,11 @@ object DataFlowAnalyzer {
         return DataFlowResult(flowPaths = listOf(FlowPath(steps = steps)))
     }
 
-    private fun analyzeBackward(project: Project, element: PsiElement, psiFile: PsiFile): DataFlowResult {
+    private fun analyzeBackward(
+        project: Project,
+        element: PsiElement,
+        psiFile: PsiFile
+    ): DataFlowResult {
         val target = element.parent?.reference?.resolve()
             ?: element.reference?.resolve()
             ?: PsiTreeUtil.getParentOfType(element, PsiNamedElement::class.java)
@@ -242,7 +272,8 @@ object DataFlowAnalyzer {
                 if (initializer != null) {
                     val file = target.containingFile?.virtualFile
                     if (file != null) {
-                        val doc = PsiDocumentManager.getInstance(project).getDocument(target.containingFile)
+                        val doc = PsiDocumentManager.getInstance(project)
+                            .getDocument(target.containingFile)
                         val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
                         steps.add(FlowStep(
                             file = ProjectUtils.toRelativePath(project, file),
@@ -257,7 +288,8 @@ object DataFlowAnalyzer {
                 if (initializer != null) {
                     val file = target.containingFile?.virtualFile
                     if (file != null) {
-                        val doc = PsiDocumentManager.getInstance(project).getDocument(target.containingFile)
+                        val doc = PsiDocumentManager.getInstance(project)
+                            .getDocument(target.containingFile)
                         val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
                         steps.add(FlowStep(
                             file = ProjectUtils.toRelativePath(project, file),
@@ -273,7 +305,8 @@ object DataFlowAnalyzer {
                     val callers = ReferencesSearch.search(fn).findAll().take(10)
                     for (caller in callers) {
                         val callerFile = caller.element.containingFile?.virtualFile ?: continue
-                        val callerDoc = PsiDocumentManager.getInstance(project).getDocument(caller.element.containingFile) ?: continue
+                        val callerDoc = PsiDocumentManager.getInstance(project)
+                            .getDocument(caller.element.containingFile) ?: continue
                         val callerLine = callerDoc.getLineNumber(caller.element.textOffset) + 1
                         val lineStart = callerDoc.getLineStartOffset(callerLine - 1)
                         val lineEnd = callerDoc.getLineEndOffset(callerLine - 1)
@@ -303,10 +336,14 @@ object DataFlowAnalyzer {
         val resolved = element.parent?.reference?.resolve()
             ?: element.reference?.resolve()
             ?: PsiTreeUtil.getParentOfType(element, PsiNamedElement::class.java)
-            ?: return DataFlowResult(annotations = emptyList(), reason = "Cannot resolve target element")
+            ?: return DataFlowResult(
+                annotations = emptyList(),
+                reason = "Cannot resolve target element"
+            )
 
         val annotations = mutableListOf<ExternalAnnotationInfo>()
-        val extAnnoManager = com.intellij.codeInsight.ExternalAnnotationsManager.getInstance(project)
+        val extAnnoManager = com.intellij.codeInsight.ExternalAnnotationsManager
+            .getInstance(project)
 
         when (resolved) {
             is PsiModifierListOwner -> {
@@ -318,7 +355,8 @@ object DataFlowAnalyzer {
                 }
 
                 try {
-                    val externalAnnos: Array<PsiAnnotation> = extAnnoManager.findExternalAnnotations(resolved) ?: emptyArray()
+                    val externalAnnos: Array<PsiAnnotation> =
+                        extAnnoManager.findExternalAnnotations(resolved) ?: emptyArray()
                     for (anno in externalAnnos) {
                         val fqn = anno.qualifiedName ?: continue
                         annotations.add(ExternalAnnotationInfo(
@@ -331,7 +369,8 @@ object DataFlowAnalyzer {
                 if (resolved is PsiMethod) {
                     for (param in resolved.parameterList.parameters) {
                         try {
-                            val paramAnnos: Array<PsiAnnotation> = extAnnoManager.findExternalAnnotations(param) ?: emptyArray()
+                            val paramAnnos: Array<PsiAnnotation> =
+                                extAnnoManager.findExternalAnnotations(param) ?: emptyArray()
                             for (anno in paramAnnos) {
                                 val fqn = anno.qualifiedName ?: continue
                                 annotations.add(ExternalAnnotationInfo(
@@ -345,9 +384,12 @@ object DataFlowAnalyzer {
 
                 val ownAnnos = resolved.annotations.filter { ann ->
                     val fqn = ann.qualifiedName ?: ""
-                    fqn.contains("Nullable") || fqn.contains("NonNull") || fqn.contains("NotNull") ||
-                        fqn.contains("UiThread") || fqn.contains("WorkerThread") || fqn.contains("MainThread") ||
-                        fqn.contains("IntRange") || fqn.contains("FloatRange") || fqn.contains("Size")
+                    fqn.contains("Nullable") || fqn.contains("NonNull") ||
+                        fqn.contains("NotNull") ||
+                        fqn.contains("UiThread") || fqn.contains("WorkerThread") ||
+                        fqn.contains("MainThread") ||
+                        fqn.contains("IntRange") || fqn.contains("FloatRange") ||
+                        fqn.contains("Size")
                 }
                 for (anno in ownAnnos) {
                     val fqn = anno.qualifiedName ?: continue
@@ -362,7 +404,10 @@ object DataFlowAnalyzer {
 
         return DataFlowResult(
             annotations = annotations,
-            reason = if (annotations.isEmpty()) "No external annotations found for this element" else "${annotations.size} annotation(s) found"
+            reason = if (annotations.isEmpty())
+                "No external annotations found for this element"
+            else
+                "${annotations.size} annotation(s) found"
         )
     }
 }

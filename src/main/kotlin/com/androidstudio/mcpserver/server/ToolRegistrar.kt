@@ -40,7 +40,7 @@ import com.androidstudio.mcpserver.services.SandboxExecutor
 import com.androidstudio.mcpserver.services.ScopeAnalyzer
 import com.androidstudio.mcpserver.services.StructuralSearcher
 import com.androidstudio.mcpserver.services.SymbolResolver
-import com.androidstudio.mcpserver.util.McpJson
+import com.androidstudio.mcpserver.util.MCP_JSON
 import com.androidstudio.mcpserver.util.ProjectResolver
 import com.androidstudio.mcpserver.util.PsiUtils
 import io.modelcontextprotocol.kotlin.sdk.server.Server
@@ -78,14 +78,27 @@ object ToolRegistrar {
         return try {
             val project = ProjectResolver.resolve(arguments)
             PsiUtils.refreshForExternalChanges(project)
-            val args = McpJson.decodeFromJsonElement(argsDeserializer, arguments ?: JsonObject(emptyMap()))
+            val args = MCP_JSON.decodeFromJsonElement(
+                argsDeserializer,
+                arguments ?: JsonObject(emptyMap())
+            )
             val result = action(project, args)
             val json = ResponseFormatter.format(result, resultSerializer, policy)
-            ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
+            ToolMetricsService.markComplete(
+                toolName,
+                json,
+                System.currentTimeMillis() - startTime,
+                false
+            )
             CallToolResult(content = listOf(TextContent(json)))
         } catch (e: ToolException) {
             val errorJson = e.toErrorJson()
-            ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+            ToolMetricsService.markComplete(
+                toolName,
+                errorJson,
+                System.currentTimeMillis() - startTime,
+                true
+            )
             CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
         }
     }
@@ -157,7 +170,13 @@ object ToolRegistrar {
                 CheckpointResult.serializer(),
                 SizePolicy.CHECKPOINT
             ) { project, args ->
-                CheckpointManager.execute(project, args.operation, args.label, args.file, args.targetLabel)
+                CheckpointManager.execute(
+                    project,
+                    args.operation,
+                    args.label,
+                    args.file,
+                    args.targetLabel
+                )
             }
         }
     }
@@ -165,7 +184,8 @@ object ToolRegistrar {
     private fun registerRefactor(server: Server) {
         server.addTool(
             name = "refactor",
-            description = "语义级安全重构（rename/move/extract/safe_delete/change_signature），跨 Java/Kotlin/XML/Manifest",
+            description = "语义级安全重构（rename/move/extract/safe_delete/change_signature），"
+                + "跨 Java/Kotlin/XML/Manifest",
             inputSchema = ToolSchemas.refactor
         ) { request ->
             handleTool(
@@ -192,7 +212,7 @@ object ToolRegistrar {
             try {
                 val project = ProjectResolver.resolve(request.arguments)
                 PsiUtils.refreshForExternalChanges(project)
-                val args = McpJson.decodeFromJsonElement(
+                val args = MCP_JSON.decodeFromJsonElement(
                     QueryProjectArgs.serializer(),
                     request.arguments ?: JsonObject(emptyMap())
                 )
@@ -202,12 +222,26 @@ object ToolRegistrar {
                 } else {
                     SizePolicy.QUERY_PROJECT_DETAIL
                 }
-                val json = ResponseFormatter.format(result, ProjectOverview.serializer(), policy)
-                ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
+                val json = ResponseFormatter.format(
+                    result,
+                    ProjectOverview.serializer(),
+                    policy
+                )
+                ToolMetricsService.markComplete(
+                    toolName,
+                    json,
+                    System.currentTimeMillis() - startTime,
+                    false
+                )
                 CallToolResult(content = listOf(TextContent(json)))
             } catch (e: ToolException) {
                 val errorJson = e.toErrorJson()
-                ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+                ToolMetricsService.markComplete(
+                    toolName,
+                    errorJson,
+                    System.currentTimeMillis() - startTime,
+                    true
+                )
                 CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
             }
         }
@@ -225,7 +259,7 @@ object ToolRegistrar {
             try {
                 val project = ProjectResolver.resolve(request.arguments)
                 PsiUtils.refreshForExternalChanges(project)
-                val args = McpJson.decodeFromJsonElement(
+                val args = MCP_JSON.decodeFromJsonElement(
                     QueryFrameworkArgs.serializer(),
                     request.arguments ?: JsonObject(emptyMap())
                 )
@@ -235,12 +269,26 @@ object ToolRegistrar {
                 } else {
                     SizePolicy.QUERY_FRAMEWORK_LIST
                 }
-                val json = ResponseFormatter.format(result, FrameworkViewResult.serializer(), policy)
-                ToolMetricsService.markComplete(toolName, json, System.currentTimeMillis() - startTime, false)
+                val json = ResponseFormatter.format(
+                    result,
+                    FrameworkViewResult.serializer(),
+                    policy
+                )
+                ToolMetricsService.markComplete(
+                    toolName,
+                    json,
+                    System.currentTimeMillis() - startTime,
+                    false
+                )
                 CallToolResult(content = listOf(TextContent(json)))
             } catch (e: ToolException) {
                 val errorJson = e.toErrorJson()
-                ToolMetricsService.markComplete(toolName, errorJson, System.currentTimeMillis() - startTime, true)
+                ToolMetricsService.markComplete(
+                    toolName,
+                    errorJson,
+                    System.currentTimeMillis() - startTime,
+                    true
+                )
                 CallToolResult(content = listOf(TextContent(errorJson)), isError = true)
             }
         }

@@ -1,5 +1,6 @@
 package com.androidstudio.mcpserver.server
 
+import com.androidstudio.mcpserver.util.MCP_JSON
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -105,7 +106,7 @@ class McpServerManager : Disposable {
 
             ktorServer = embeddedServer(CIO, host = "127.0.0.1", port = selectedPort) {
                 install(ContentNegotiation) {
-                    json(io.modelcontextprotocol.kotlin.sdk.types.McpJson)
+                    json(MCP_JSON)
                 }
                 mcpStreamableHttp {
                     server

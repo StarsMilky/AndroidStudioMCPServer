@@ -45,8 +45,17 @@ object ToolSchemas {
             put("file", stringProp("文件路径（相对于项目根目录）"))
             put("line", intProp("行号（1-based）"))
             put("column", intProp("列号（1-based）"))
-            put("mode", enumProp("查询模式", listOf("USAGES", "CALLERS", "CALLEES", "TYPE_HIERARCHY")))
-            put("scope", stringProp("搜索范围：project（默认）或 module:模块名"))
+            put(
+                "mode",
+                enumProp(
+                    "查询模式",
+                    listOf("USAGES", "CALLERS", "CALLEES", "TYPE_HIERARCHY")
+                )
+            )
+            put(
+                "scope",
+                stringProp("搜索范围：project（默认）或 module:模块名")
+            )
             put("depth", intProp("调用层级深度（默认 3）"))
             put("offset", intProp("分页偏移量（默认 0）"))
             put("limit", intProp("分页大小（默认 20）"))
@@ -79,7 +88,13 @@ object ToolSchemas {
 
     val refactor = ToolSchema(
         properties = buildJsonObject {
-            put("operation", enumProp("重构类型", listOf("RENAME", "MOVE", "EXTRACT", "SAFE_DELETE", "CHANGE_SIGNATURE")))
+            put(
+                "operation",
+                enumProp(
+                    "重构类型",
+                    listOf("RENAME", "MOVE", "EXTRACT", "SAFE_DELETE", "CHANGE_SIGNATURE")
+                )
+            )
             put("file", stringProp("目标文件路径"))
             put("line", intProp("行号（1-based）"))
             put("column", intProp("列号（1-based）"))
@@ -108,9 +123,24 @@ object ToolSchemas {
 
     val queryProject = ToolSchema(
         properties = buildJsonObject {
-            put("mode", enumProp("查询模式", listOf("OVERVIEW", "DEPENDENCY", "API_SURFACE", "VARIANT")))
-            put("target_class", stringProp("目标类全限定名（DEPENDENCY 时使用）"))
-            put("change_type", enumProp("变更类型", listOf("SIGNATURE_CHANGE", "BEHAVIOR_CHANGE", "DELETE")))
+            put(
+                "mode",
+                enumProp(
+                    "查询模式",
+                    listOf("OVERVIEW", "DEPENDENCY", "API_SURFACE", "VARIANT")
+                )
+            )
+            put(
+                "target_class",
+                stringProp("目标类全限定名（DEPENDENCY 时使用）")
+            )
+            put(
+                "change_type",
+                enumProp(
+                    "变更类型",
+                    listOf("SIGNATURE_CHANGE", "BEHAVIOR_CHANGE", "DELETE")
+                )
+            )
             put("max_hops", intProp("依赖传播深度（默认 3）"))
             put("module", stringProp("指定模块（VARIANT/API_SURFACE 时使用）"))
             put("project_path", stringProp("项目路径（多项目时指定，可选）"))
@@ -120,7 +150,13 @@ object ToolSchemas {
 
     val queryFramework = ToolSchema(
         properties = buildJsonObject {
-            put("framework", enumProp("框架类型", listOf("ROOM", "RETROFIT", "HILT", "COMPOSE", "NAVIGATION")))
+            put(
+                "framework",
+                enumProp(
+                    "框架类型",
+                    listOf("ROOM", "RETROFIT", "HILT", "COMPOSE", "NAVIGATION")
+                )
+            )
             put("detail_target", stringProp("详情目标名称（如实体名、接口名）"))
             put("project_path", stringProp("项目路径（多项目时指定，可选）"))
         },
@@ -132,7 +168,13 @@ object ToolSchemas {
             put("file", stringProp("文件路径（相对于项目根目录）"))
             put("line", intProp("行号（1-based）"))
             put("column", intProp("列号（1-based）"))
-            put("mode", enumProp("分析模式", listOf("NULLABILITY", "FORWARD", "BACKWARD", "EXTERNAL_ANNOTATIONS")))
+            put(
+                "mode",
+                enumProp(
+                    "分析模式",
+                    listOf("NULLABILITY", "FORWARD", "BACKWARD", "EXTERNAL_ANNOTATIONS")
+                )
+            )
             put("project_path", stringProp("项目路径（多项目时指定，可选）"))
         },
         required = listOf("file", "line", "column")
@@ -154,7 +196,11 @@ object ToolSchemas {
                             putJsonObject("items") { put("type", "string") }
                         })
                     }
-                    putJsonArray("required") { add("name"); add("source"); add("must_not_depend_on") }
+                    putJsonArray("required") {
+                        add("name")
+                        add("source")
+                        add("must_not_depend_on")
+                    }
                 }
             })
             put("project_path", stringProp("项目路径（多项目时指定，可选）"))
@@ -176,7 +222,13 @@ object ToolSchemas {
 
     val analyzeQuality = ToolSchema(
         properties = buildJsonObject {
-            put("mode", enumProp("分析模式", listOf("COMPLEXITY", "DEAD_CODE", "CLONES", "PATTERNS", "ERROR_HANDLING")))
+            put(
+                "mode",
+                enumProp(
+                    "分析模式",
+                    listOf("COMPLEXITY", "DEAD_CODE", "CLONES", "PATTERNS", "ERROR_HANDLING")
+                )
+            )
             put("scope", stringProp("分析范围：project（默认）或 module:模块名"))
             put("target", stringProp("目标类/包（可选，缩小范围）"))
             put("top_n", intProp("返回 Top N 结果（默认 10）"))

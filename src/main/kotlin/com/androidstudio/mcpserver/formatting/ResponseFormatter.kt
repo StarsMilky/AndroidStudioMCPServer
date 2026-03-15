@@ -1,6 +1,6 @@
 package com.androidstudio.mcpserver.formatting
 
-import com.androidstudio.mcpserver.util.McpJson
+import com.androidstudio.mcpserver.util.MCP_JSON
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -10,7 +10,7 @@ import kotlinx.serialization.json.JsonPrimitive
 object ResponseFormatter {
 
     fun <T> format(result: T, serializer: KSerializer<T>, policy: SizePolicy): String {
-        val jsonString = McpJson.encodeToString(serializer, result)
+        val jsonString = MCP_JSON.encodeToString(serializer, result)
         if (jsonString.toByteArray(Charsets.UTF_8).size <= policy.maxBytes) {
             return jsonString
         }
@@ -18,7 +18,7 @@ object ResponseFormatter {
     }
 
     private fun truncate(jsonString: String, policy: SizePolicy): String {
-        val jsonElement = McpJson.parseToJsonElement(jsonString)
+        val jsonElement = MCP_JSON.parseToJsonElement(jsonString)
         if (jsonElement !is JsonObject) return jsonString
 
         val mutable = jsonElement.toMap().toMutableMap()

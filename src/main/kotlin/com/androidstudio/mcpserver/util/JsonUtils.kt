@@ -5,7 +5,7 @@ package com.androidstudio.mcpserver.util
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNamingStrategy
 
-val McpJson = Json {
+val MCP_JSON = Json {
     namingStrategy = JsonNamingStrategy.SnakeCase
     encodeDefaults = true
     ignoreUnknownKeys = true

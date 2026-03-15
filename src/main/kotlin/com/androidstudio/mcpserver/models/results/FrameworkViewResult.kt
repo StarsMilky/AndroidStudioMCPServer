@@ -46,7 +46,12 @@ data class EntityField(val name: String, val type: String, val nullable: Boolean
 data class RoomDao(val name: String, val methods: List<DaoMethod>)
 
 @Serializable
-data class DaoMethod(val name: String, val sql: String?, val returnType: String, val annotation: String)
+data class DaoMethod(
+    val name: String,
+    val sql: String?,
+    val returnType: String,
+    val annotation: String,
+)
 
 @Serializable
 data class RoomMigration(val from: Int, val to: Int, val file: String)
@@ -55,7 +60,11 @@ data class RoomMigration(val from: Int, val to: Int, val file: String)
 data class RetrofitView(val interfaces: List<RetrofitInterface>)
 
 @Serializable
-data class RetrofitInterface(val name: String, val baseUrl: String?, val endpoints: List<RetrofitEndpoint>)
+data class RetrofitInterface(
+    val name: String,
+    val baseUrl: String?,
+    val endpoints: List<RetrofitEndpoint>,
+)
 
 @Serializable
 data class RetrofitEndpoint(
@@ -96,7 +105,13 @@ data class ComposeView(
 )
 
 @Serializable
-data class ComposableInfo(val name: String, val file: String, val line: Int, val parameters: List<String>, val preview: Boolean)
+data class ComposableInfo(
+    val name: String,
+    val file: String,
+    val line: Int,
+    val parameters: List<String>,
+    val preview: Boolean,
+)
 
 @Serializable
 data class ThemeInfo(val name: String, val file: String, val colorScheme: String?)
@@ -115,10 +130,20 @@ data class NavigationView(
 data class NavGraph(val id: String, val startDestination: String, val file: String)
 
 @Serializable
-data class NavDestination(val id: String, val className: String?, val arguments: List<NavArgument>, val graphId: String)
+data class NavDestination(
+    val id: String,
+    val className: String?,
+    val arguments: List<NavArgument>,
+    val graphId: String,
+)
 
 @Serializable
-data class NavArgument(val name: String, val type: String, val nullable: Boolean, val defaultValue: String?)
+data class NavArgument(
+    val name: String,
+    val type: String,
+    val nullable: Boolean,
+    val defaultValue: String?,
+)
 
 @Serializable
 data class NavDeepLink(val uri: String, val destination: String)

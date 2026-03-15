@@ -32,7 +32,8 @@ object SandboxExecutor {
 
     private fun executeDecompile(project: Project, args: SandboxArgs): SandboxResult {
         val className = args.qualifiedClassName ?: throw ToolException(
-            McpErrorCode.INVALID_SCOPE, mapOf("reason" to "qualifiedClassName is required for decompile")
+            McpErrorCode.INVALID_SCOPE,
+            mapOf("reason" to "qualifiedClassName is required for decompile")
         )
 
         return PsiUtils.smartReadAction(project) {
@@ -73,7 +74,10 @@ object SandboxExecutor {
         return PsiUtils.smartReadAction(project) {
             val vf = ProjectUtils.findFile(project, javaFile)
             val pf = ProjectUtils.getPsiFile(project, vf) as? PsiJavaFile
-                ?: throw ToolException(McpErrorCode.INVALID_SCOPE, mapOf("reason" to "File is not a Java file"))
+                ?: throw ToolException(
+                    McpErrorCode.INVALID_SCOPE,
+                    mapOf("reason" to "File is not a Java file")
+                )
 
             val sb = StringBuilder()
             val packageName = pf.packageName
@@ -94,8 +98,10 @@ object SandboxExecutor {
             SandboxResult(
                 kotlinCode = sb.toString(),
                 warnings = listOf(
-                    "This is a basic structural conversion. For production use, use IDE's built-in J2K converter.",
-                    "Manual review required for: null safety, property vs field, companion objects, etc."
+                    "This is a basic structural conversion. For production use, " +
+                        "use IDE's built-in J2K converter.",
+                    "Manual review required for: null safety, property vs field, " +
+                        "companion objects, etc."
                 )
             )
         }
@@ -109,7 +115,8 @@ object SandboxExecutor {
             else -> "internal "
         }
         val abstract = if (cls.hasModifierProperty(PsiModifier.ABSTRACT)) "abstract " else ""
-        val open = if (!cls.hasModifierProperty(PsiModifier.FINAL) && !cls.isInterface && !cls.isEnum) "open " else ""
+        val open = if (!cls.hasModifierProperty(PsiModifier.FINAL) &&
+            !cls.isInterface && !cls.isEnum) "open " else ""
         val keyword = when {
             cls.isInterface -> "interface"
             cls.isEnum -> "enum class"
@@ -122,7 +129,8 @@ object SandboxExecutor {
         }
         cls.interfaces.forEach { superTypes.add(it.name ?: "") }
 
-        val superClause = if (superTypes.isNotEmpty()) " : ${superTypes.joinToString(", ")}" else ""
+        val superClause = if (superTypes.isNotEmpty())
+            " : ${superTypes.joinToString(", ")}" else ""
         sb.appendLine("${indent}${visibility}$keyword ${cls.name}$superClause {")
 
         for (field in cls.fields) {
@@ -149,9 +157,13 @@ object SandboxExecutor {
             val params = method.parameterList.parameters.joinToString(", ") {
                 "${it.name}: ${convertJavaTypeToKotlin(it.type.canonicalText)}"
             }
-            val returnType = method.returnType?.let { convertJavaTypeToKotlin(it.canonicalText) } ?: "Unit"
-            val returnClause = if (returnType == "Unit" || returnType == "void") "" else ": $returnType"
-            sb.appendLine("$indent    ${mVisibility}${override}fun ${method.name}($params)$returnClause {")
+            val returnType = method.returnType?.let { convertJavaTypeToKotlin(it.canonicalText) }
+                ?: "Unit"
+            val returnClause = if (returnType == "Unit" || returnType == "void")
+                "" else ": $returnType"
+            sb.appendLine(
+                "$indent    ${mVisibility}${override}fun ${method.name}($params)$returnClause {"
+            )
             val body = method.body
             if (body != null) {
                 val bodyText = convertJavaBodyToKotlin(body.text)
@@ -202,7 +214,8 @@ object SandboxExecutor {
             .replace(" != null", " != null")
             .replace(" == null", " == null")
             .replace("null", "null")
-        if (result.length > 500) result = result.take(500) + "\n// ... (truncated, manual conversion needed)"
+        if (result.length > 500) result = result.take(500) +
+            "\n// ... (truncated, manual conversion needed)"
         return result
     }
 
@@ -215,12 +228,16 @@ object SandboxExecutor {
 
         return PsiUtils.smartReadAction(project) {
             val scope = GlobalSearchScope.projectScope(project)
-            val ktFiles = com.intellij.psi.search.FilenameIndex.getAllFilesByExt(project, "kt", scope)
-            val javaFiles = com.intellij.psi.search.FilenameIndex.getAllFilesByExt(project, "java", scope)
+            val ktFiles = com.intellij.psi.search.FilenameIndex
+                .getAllFilesByExt(project, "kt", scope)
+            val javaFiles = com.intellij.psi.search.FilenameIndex
+                .getAllFilesByExt(project, "java", scope)
 
             var problemsFound = 0
             var problemsFixed = 0
-            val unfixable = mutableListOf<com.androidstudio.mcpserver.models.results.UnfixableItem>()
+            val unfixable = mutableListOf<
+                com.androidstudio.mcpserver.models.results.UnfixableItem
+            >()
 
             for (vf in ktFiles + javaFiles) {
                 val pf = PsiManager.getInstance(project).findFile(vf) ?: continue
@@ -231,20 +248,30 @@ object SandboxExecutor {
                         "UnusedImport", "unused-import" -> {
                             if (pf is org.jetbrains.kotlin.psi.KtFile) {
                                 for (importDir in pf.importDirectives) {
-                                    val importedFqn = importDir.importedFqName?.asString() ?: continue
+                                    val importedFqn = importDir.importedFqName?.asString()
+                                        ?: continue
                                     val simpleName = importedFqn.substringAfterLast(".")
-                                    val isUsed = pf.declarations.any { decl -> decl.text.contains(simpleName) }
+                                    val isUsed = pf.declarations.any { decl ->
+                                        decl.text.contains(simpleName)
+                                    }
                                     if (!isUsed) {
                                         problemsFound++
                                         if (!args.dryRun) {
                                             try {
-                                                WriteCommandAction.runWriteCommandAction(project) { importDir.delete() }
+                                                WriteCommandAction.runWriteCommandAction(
+                                                    project
+                                                ) { importDir.delete() }
                                                 problemsFixed++
                                             } catch (e: Exception) {
-                                                unfixable.add(com.androidstudio.mcpserver.models.results.UnfixableItem(
-                                                    file = relPath, line = 0,
-                                                    reason = "Failed to remove import: ${e.message}"
-                                                ))
+                                                unfixable.add(
+                                                    com.androidstudio.mcpserver.models
+                                                        .results.UnfixableItem(
+                                                        file = relPath,
+                                                        line = 0,
+                                                        reason = "Failed to remove import: " +
+                                                            "${e.message}"
+                                                    )
+                                                )
                                             }
                                         }
                                     }
@@ -253,9 +280,13 @@ object SandboxExecutor {
                         }
                         "RedundantVisibilityModifier", "redundant-visibility" -> {
                             if (pf is org.jetbrains.kotlin.psi.KtFile) {
-                                for (decl in PsiTreeUtil.findChildrenOfType(pf, org.jetbrains.kotlin.psi.KtDeclaration::class.java)) {
-                                    if (decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PUBLIC_KEYWORD) &&
-                                        decl.parent is org.jetbrains.kotlin.psi.KtClassBody) {
+                                for (decl in PsiTreeUtil.findChildrenOfType(
+                                    pf,
+                                    org.jetbrains.kotlin.psi.KtDeclaration::class.java
+                                )) {
+                                    if (decl.hasModifier(
+                                        org.jetbrains.kotlin.lexer.KtTokens.PUBLIC_KEYWORD
+                                    ) && decl.parent is org.jetbrains.kotlin.psi.KtClassBody) {
                                         problemsFound++
                                     }
                                 }
@@ -263,19 +294,28 @@ object SandboxExecutor {
                         }
                         "ExplicitThis", "explicit-this" -> {
                             if (pf is org.jetbrains.kotlin.psi.KtFile) {
-                                for (expr in PsiTreeUtil.findChildrenOfType(pf, org.jetbrains.kotlin.psi.KtThisExpression::class.java)) {
+                                for (expr in PsiTreeUtil.findChildrenOfType(
+                                    pf,
+                                    org.jetbrains.kotlin.psi.KtThisExpression::class.java
+                                )) {
                                     val parent = expr.parent
-                                    if (parent is org.jetbrains.kotlin.psi.KtDotQualifiedExpression) {
+                                    val isDotQualified =
+                                        parent is org.jetbrains.kotlin.psi.KtDotQualifiedExpression
+                                    if (isDotQualified) {
                                         problemsFound++
                                     }
                                 }
                             }
                         }
                         else -> {
-                            unfixable.add(com.androidstudio.mcpserver.models.results.UnfixableItem(
-                                file = relPath, line = 0,
-                                reason = "Inspection '$inspectionId' is not supported for batch fix"
-                            ))
+                            unfixable.add(
+                                com.androidstudio.mcpserver.models.results.UnfixableItem(
+                                    file = relPath,
+                                    line = 0,
+                                    reason = "Inspection '$inspectionId' is not supported " +
+                                        "for batch fix"
+                                )
+                            )
                             break
                         }
                     }

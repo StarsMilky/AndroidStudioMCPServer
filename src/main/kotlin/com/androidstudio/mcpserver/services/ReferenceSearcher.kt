@@ -41,19 +41,26 @@ object ReferenceSearcher {
             val element = psiFile.findElementAt(offset)
                 ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
 
-            val target = element.parent?.reference?.resolve() ?: element.reference?.resolve() ?: element.parent
-            ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
+            val target = element.parent?.reference?.resolve()
+                ?: element.reference?.resolve()
+                ?: element.parent
+                ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
 
             when (args.mode) {
                 FindReferencesMode.USAGES -> searchUsages(project, target, args)
-                FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY -> searchCallHierarchy(project, target, args)
+                FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY ->
+                    searchCallHierarchy(project, target, args)
                 FindReferencesMode.CALLEES -> searchCallees(project, target, args)
                 FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
             }
         }
     }
 
-    private fun searchUsages(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
+    private fun searchUsages(
+        project: Project,
+        target: PsiElement,
+        args: FindReferencesArgs
+    ): ReferenceResult {
         val scope = resolveScope(project, args.scope)
         val references = ReferencesSearch.search(target, scope).findAll()
         val total = references.size
@@ -68,7 +75,8 @@ object ReferenceSearcher {
     private fun buildUsageInfo(project: Project, ref: PsiReference): UsageInfo? {
         val element = ref.element
         val file = element.containingFile?.virtualFile ?: return null
-        val document = PsiDocumentManager.getInstance(project).getDocument(element.containingFile) ?: return null
+        val document = PsiDocumentManager.getInstance(project)
+            .getDocument(element.containingFile) ?: return null
         val line = document.getLineNumber(element.textOffset) + 1
         val lineStart = document.getLineStartOffset(line - 1)
         val lineEnd = document.getLineEndOffset(line - 1)
@@ -88,22 +96,36 @@ object ReferenceSearcher {
         return when {
             parent is PsiMethodCallExpression -> UsageType.CALL
             parent is KtCallExpression -> UsageType.CALL
-            parent is PsiMethod && PsiTreeUtil.isAncestor(parent, element, true) -> UsageType.OVERRIDE
+            parent is PsiMethod && PsiTreeUtil.isAncestor(parent, element, true) ->
+                UsageType.OVERRIDE
             parent is PsiAssignmentExpression && parent.lExpression == element -> UsageType.WRITE
-            parent is KtBinaryExpression && parent.left == element && parent.operationReference.text == "=" -> UsageType.WRITE
+            parent is KtBinaryExpression && parent.left == element &&
+                parent.operationReference.text == "=" -> UsageType.WRITE
             else -> UsageType.READ
         }
     }
 
-    private fun searchCallHierarchy(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
+    private fun searchCallHierarchy(
+        project: Project,
+        target: PsiElement,
+        args: FindReferencesArgs
+    ): ReferenceResult {
         val method = findEnclosingMethod(target)
-            ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND, mapOf("reason" to "Target is not a method"))
+            ?: throw ToolException(
+                McpErrorCode.SYMBOL_NOT_FOUND,
+                mapOf("reason" to "Target is not a method")
+            )
 
         val rootNode = buildCallTree(project, method, args.depth, mutableSetOf())
         return ReferenceResult(total = countNodes(rootNode), callHierarchy = rootNode)
     }
 
-    private fun buildCallTree(project: Project, method: PsiElement, maxDepth: Int, visited: MutableSet<PsiElement>): CallNode {
+    private fun buildCallTree(
+        project: Project,
+        method: PsiElement,
+        maxDepth: Int,
+        visited: MutableSet<PsiElement>
+    ): CallNode {
         if (!visited.add(method)) {
             return buildCallNodeForMethod(project, method, emptyList())
         }
@@ -123,14 +145,19 @@ object ReferenceSearcher {
         return buildCallNodeForMethod(project, method, children)
     }
 
-    private fun buildCallNodeForMethod(project: Project, method: PsiElement, children: List<CallNode>): CallNode {
+    private fun buildCallNodeForMethod(
+        project: Project,
+        method: PsiElement,
+        children: List<CallNode>
+    ): CallNode {
         val name = when (method) {
             is PsiMethod -> "${method.containingClass?.qualifiedName ?: ""}.${method.name}"
             is KtNamedFunction -> method.fqName?.asString() ?: method.name ?: "<anonymous>"
             else -> method.text.take(30)
         }
         val file = method.containingFile?.virtualFile
-        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file) else "<unknown>"
+        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
+            else "<unknown>"
         val document = method.containingFile?.let {
             PsiDocumentManager.getInstance(project).getDocument(it)
         }
@@ -141,10 +168,17 @@ object ReferenceSearcher {
 
     private fun countNodes(node: CallNode): Int = 1 + node.children.sumOf { countNodes(it) }
 
-    private fun searchCallees(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
+    private fun searchCallees(
+        project: Project,
+        target: PsiElement,
+        args: FindReferencesArgs
+    ): ReferenceResult {
         val method = PsiTreeUtil.getParentOfType(target, PsiMethod::class.java, false)
             ?: PsiTreeUtil.getParentOfType(target, KtNamedFunction::class.java, false)
-            ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND, mapOf("reason" to "Target is not a method"))
+            ?: throw ToolException(
+                McpErrorCode.SYMBOL_NOT_FOUND,
+                mapOf("reason" to "Target is not a method")
+            )
 
         val callees = mutableListOf<UsageInfo>()
         val visited = mutableSetOf<String>()
@@ -178,14 +212,20 @@ object ReferenceSearcher {
                     val key = "${resolved.containingClass?.qualifiedName}.${resolved.name}"
                     if (visited.add(key)) {
                         val file = resolved.containingFile?.virtualFile
-                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file) else "<unknown>"
+                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
+                            else "<unknown>"
                         val doc = resolved.containingFile?.let {
                             PsiDocumentManager.getInstance(project).getDocument(it)
                         }
                         val line = doc?.getLineNumber(resolved.textOffset)?.plus(1) ?: 0
+                        val paramTypes = resolved.parameterList.parameters
+                            .joinToString(", ") { it.type.presentableText }
+                        val code = "${resolved.containingClass?.name ?: ""}." +
+                            "${resolved.name}($paramTypes)"
                         callees.add(UsageInfo(
-                            file = filePath, line = line,
-                            code = "${resolved.containingClass?.name ?: ""}.${resolved.name}(${resolved.parameterList.parameters.joinToString(", ") { it.type.presentableText }})",
+                            file = filePath,
+                            line = line,
+                            code = code,
                             usageType = UsageType.CALL
                         ))
                     }
@@ -202,7 +242,8 @@ object ReferenceSearcher {
                     }
                     if (key.isNotEmpty() && visited.add(key)) {
                         val file = ref.containingFile?.virtualFile
-                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file) else "<unknown>"
+                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
+                            else "<unknown>"
                         val doc = ref.containingFile?.let {
                             PsiDocumentManager.getInstance(project).getDocument(it)
                         }
@@ -223,12 +264,19 @@ object ReferenceSearcher {
         }
     }
 
-    private fun searchTypeHierarchy(project: Project, target: PsiElement, args: FindReferencesArgs): ReferenceResult {
+    private fun searchTypeHierarchy(
+        project: Project,
+        target: PsiElement,
+        args: FindReferencesArgs
+    ): ReferenceResult {
         val psiClass = when (target) {
             is PsiClass -> target
             is KtClass -> target.toLightClass()
             else -> PsiTreeUtil.getParentOfType(target, PsiClass::class.java)
-        } ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND, mapOf("reason" to "Target is not a class"))
+        } ?: throw ToolException(
+            McpErrorCode.SYMBOL_NOT_FOUND,
+            mapOf("reason" to "Target is not a class")
+        )
 
         val supers = psiClass.supers.mapNotNull { it.qualifiedName }
         val scope = GlobalSearchScope.projectScope(project)
@@ -260,7 +308,10 @@ object ReferenceSearcher {
 
     private fun resolveScope(project: Project, scope: String): GlobalSearchScope = when (scope) {
         "project" -> GlobalSearchScope.projectScope(project)
-        "file" -> throw ToolException(McpErrorCode.INVALID_SCOPE, mapOf("reason" to "File scope requires file context"))
+        "file" -> throw ToolException(
+            McpErrorCode.INVALID_SCOPE,
+            mapOf("reason" to "File scope requires file context")
+        )
         else -> GlobalSearchScope.projectScope(project)
     }
 }

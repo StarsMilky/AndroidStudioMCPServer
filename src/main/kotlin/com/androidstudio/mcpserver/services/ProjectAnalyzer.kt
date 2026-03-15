@@ -73,7 +73,11 @@ object ProjectAnalyzer {
                 name = module.name,
                 type = detectModuleType(module.name),
                 dependsOn = deps,
-                stats = ModuleStats(classes = ktFiles + javaFiles, kotlinFiles = ktFiles, javaFiles = javaFiles)
+                stats = ModuleStats(
+                    classes = ktFiles + javaFiles,
+                    kotlinFiles = ktFiles,
+                    javaFiles = javaFiles
+                )
             )
         }
 
@@ -107,7 +111,10 @@ object ProjectAnalyzer {
             modules = modules,
             architecturePattern = pattern,
             entryPoints = entryPoints,
-            dependencyDirection = if (modules.size > 1) buildDependencyDirection(modules) else "single-module",
+            dependencyDirection = if (modules.size > 1)
+                buildDependencyDirection(modules)
+            else
+                "single-module",
             cycles = cycles,
             frameworks = frameworksSummary,
             keyClasses = keyClasses,
@@ -126,7 +133,10 @@ object ProjectAnalyzer {
         }
     }
 
-    private fun detectFrameworksSummary(project: Project, scope: GlobalSearchScope): Map<String, FrameworkOverviewSummary> {
+    private fun detectFrameworksSummary(
+        project: Project,
+        scope: GlobalSearchScope
+    ): Map<String, FrameworkOverviewSummary> {
         val result = mutableMapOf<String, FrameworkOverviewSummary>()
         val allFiles = FilenameIndex.getAllFilesByExt(project, "kt", scope) +
             FilenameIndex.getAllFilesByExt(project, "java", scope)
@@ -143,7 +153,10 @@ object ProjectAnalyzer {
             if (content.contains("@Entity")) roomEntities++
             if (content.contains("@Dao")) daos++
             if (content.contains("@Module") && content.contains("@InstallIn")) hiltModules++
-            if (content.contains("@GET") || content.contains("@POST") || content.contains("@PUT")) retrofitServices++
+            if (content.contains("@GET")
+                || content.contains("@POST")
+                || content.contains("@PUT")
+            ) retrofitServices++
             if (content.contains("@Composable")) composables++
         }
 
@@ -153,11 +166,26 @@ object ProjectAnalyzer {
             if (content.contains("<navigation") || content.contains("app:navGraph")) navGraphs++
         }
 
-        if (roomEntities > 0) result["room"] = FrameworkOverviewSummary(roomEntities + daos, "$roomEntities entities, $daos DAOs")
-        if (hiltModules > 0) result["hilt"] = FrameworkOverviewSummary(hiltModules, "$hiltModules modules")
-        if (retrofitServices > 0) result["retrofit"] = FrameworkOverviewSummary(retrofitServices, "$retrofitServices service files")
-        if (composables > 0) result["compose"] = FrameworkOverviewSummary(composables, "$composables composable files")
-        if (navGraphs > 0) result["navigation"] = FrameworkOverviewSummary(navGraphs, "$navGraphs navigation files")
+        if (roomEntities > 0) result["room"] = FrameworkOverviewSummary(
+            roomEntities + daos,
+            "$roomEntities entities, $daos DAOs"
+        )
+        if (hiltModules > 0) result["hilt"] = FrameworkOverviewSummary(
+            hiltModules,
+            "$hiltModules modules"
+        )
+        if (retrofitServices > 0) result["retrofit"] = FrameworkOverviewSummary(
+            retrofitServices,
+            "$retrofitServices service files"
+        )
+        if (composables > 0) result["compose"] = FrameworkOverviewSummary(
+            composables,
+            "$composables composable files"
+        )
+        if (navGraphs > 0) result["navigation"] = FrameworkOverviewSummary(
+            navGraphs,
+            "$navGraphs navigation files"
+        )
 
         return result
     }
@@ -212,12 +240,17 @@ object ProjectAnalyzer {
             val fns = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
                 .filter { !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
                 .map { fn ->
-                    val params = fn.valueParameters.joinToString(", ") { "${it.name}: ${it.typeReference?.text ?: "Any"}" }
+                    val params = fn.valueParameters.joinToString(", ") {
+                        "${it.name}: ${it.typeReference?.text ?: "Any"}"
+                    }
                     val ret = fn.typeReference?.text?.let { ": $it" } ?: ""
                     "${fn.name}($params)$ret"
                 }
             val props = PsiTreeUtil.findChildrenOfType(decl, KtProperty::class.java)
-                .filter { it.parent == decl.body && !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
+                .filter {
+                    it.parent == decl.body
+                        && !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD)
+                }
                 .map { "${it.name}: ${it.typeReference?.text ?: "?"}" }
             props + fns
         } else null
@@ -234,7 +267,9 @@ object ProjectAnalyzer {
 
     private fun buildJavaClassEntry(cls: PsiClass, includeMembers: Boolean): ClassEntry {
         val supers = mutableListOf<String>()
-        cls.superClass?.let { if (it.qualifiedName != "java.lang.Object") supers.add(it.name ?: "") }
+        cls.superClass?.let {
+            if (it.qualifiedName != "java.lang.Object") supers.add(it.name ?: "")
+        }
         cls.interfaces.forEach { supers.add(it.name ?: "") }
         val annos = cls.annotations.mapNotNull { "@${it.qualifiedName?.substringAfterLast(".")}" }
         val kind = when {
@@ -251,7 +286,9 @@ object ProjectAnalyzer {
 
         val members = if (includeMembers) {
             cls.methods.filter { it.hasModifierProperty(PsiModifier.PUBLIC) }.map { m ->
-                val params = m.parameterList.parameters.joinToString(", ") { "${it.type.presentableText} ${it.name}" }
+                val params = m.parameterList.parameters.joinToString(", ") {
+                    "${it.type.presentableText} ${it.name}"
+                }
                 "${m.name}($params): ${m.returnType?.presentableText ?: "void"}"
             }
         } else null
@@ -283,14 +320,27 @@ object ProjectAnalyzer {
                 } catch (_: Exception) { 0 }
                 if (refCount >= 3) {
                     val role = when {
-                        decl.annotationEntries.any { it.shortName?.asString() == "HiltAndroidApp" } -> "application"
-                        decl.annotationEntries.any { it.shortName?.asString() == "AndroidEntryPoint" } -> "entry_point"
-                        decl.annotationEntries.any { it.shortName?.asString() == "HiltViewModel" } -> "viewmodel"
+                        decl.annotationEntries.any {
+                            it.shortName?.asString() == "HiltAndroidApp"
+                        } -> "application"
+                        decl.annotationEntries.any {
+                            it.shortName?.asString() == "AndroidEntryPoint"
+                        } -> "entry_point"
+                        decl.annotationEntries.any {
+                            it.shortName?.asString() == "HiltViewModel"
+                        } -> "viewmodel"
                         name.contains("Repository") -> "repository"
                         name.contains("UseCase") -> "use_case"
                         else -> "hub"
                     }
-                    candidates.add(KeyClassInfo(name = name, module = moduleName, role = role, references = refCount))
+                    candidates.add(
+                        KeyClassInfo(
+                            name = name,
+                            module = moduleName,
+                            role = role,
+                            references = refCount
+                        )
+                    )
                 }
             }
         }
@@ -300,7 +350,8 @@ object ProjectAnalyzer {
 
     private fun analyzeDependency(project: Project, args: QueryProjectArgs): ProjectOverview {
         val targetClass = args.targetClass ?: throw ToolException(
-            McpErrorCode.INVALID_SCOPE, mapOf("reason" to "target_class is required for dependency mode")
+            McpErrorCode.INVALID_SCOPE,
+            mapOf("reason" to "target_class is required for dependency mode")
         )
 
         val scope = GlobalSearchScope.projectScope(project)
@@ -326,7 +377,11 @@ object ProjectAnalyzer {
         return buildDependencyResult(project, psiClass, args)
     }
 
-    private fun buildDependencyResult(project: Project, element: PsiElement, args: QueryProjectArgs): ProjectOverview {
+    private fun buildDependencyResult(
+        project: Project,
+        element: PsiElement,
+        args: QueryProjectArgs
+    ): ProjectOverview {
         val scope = GlobalSearchScope.projectScope(project)
         val maxHops = args.maxHops.coerceIn(1, 5)
 
@@ -357,8 +412,10 @@ object ProjectAnalyzer {
                     for (ref in refs) {
                         val file = ref.element.containingFile?.virtualFile ?: continue
                         nextHopFiles.add(ProjectUtils.toRelativePath(project, file))
-                        PsiTreeUtil.getParentOfType(ref.element, PsiClass::class.java)?.let { nextHopElements.add(it) }
-                        PsiTreeUtil.getParentOfType(ref.element, KtClassOrObject::class.java)?.let { nextHopElements.add(it) }
+                        PsiTreeUtil.getParentOfType(ref.element, PsiClass::class.java)
+                            ?.let { nextHopElements.add(it) }
+                        PsiTreeUtil.getParentOfType(ref.element, KtClassOrObject::class.java)
+                            ?.let { nextHopElements.add(it) }
                     }
                 }
                 val uniqueFiles = nextHopFiles.distinct() - directImpact.toSet()
@@ -400,14 +457,16 @@ object ProjectAnalyzer {
                 affectedModules = affectedModules,
                 affectedTests = affectedTests,
                 riskLevel = riskLevel,
-                suggestion = "Direct: ${directImpact.size} files, Transitive: $totalTransitive files across ${affectedModules.size} module(s)"
+                suggestion = "Direct: ${directImpact.size} files, Transitive: $totalTransitive "
+                    + "files across ${affectedModules.size} module(s)"
             )
         )
     }
 
     private fun analyzeApiSurface(project: Project, args: QueryProjectArgs): ProjectOverview {
         val scope = if (args.module != null) {
-            val module = ModuleManager.getInstance(project).modules.firstOrNull { it.name == args.module }
+            val module = ModuleManager.getInstance(project).modules
+                .firstOrNull { it.name == args.module }
             module?.moduleScope ?: GlobalSearchScope.projectScope(project)
         } else {
             GlobalSearchScope.projectScope(project)
@@ -429,7 +488,8 @@ object ProjectAnalyzer {
                         }
                         ApiMethod(
                             name = m.name,
-                            signature = "${m.returnType?.canonicalText ?: "void"} ${m.name}($params)",
+                            signature = "${m.returnType?.canonicalText ?: "void"} "
+                                + "${m.name}($params)",
                             visibility = "public"
                         )
                     }
@@ -459,14 +519,21 @@ object ProjectAnalyzer {
                         }
                         ApiMethod(
                             name = fn.name ?: "<anonymous>",
-                            signature = "fun ${fn.name}($params): ${fn.typeReference?.text ?: "Unit"}",
-                            visibility = if (fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD)) "internal" else "public"
+                            signature = "fun ${fn.name}($params): "
+                                + "${fn.typeReference?.text ?: "Unit"}",
+                            visibility = if (fn.hasModifier(
+                                org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD
+                            )) "internal" else "public"
                         )
                     }
                 apiClasses.add(ApiClass(
                     name = decl.fqName?.asString() ?: decl.name ?: "<anonymous>",
                     kind = when (decl) {
-                        is KtClass -> if (decl.isInterface()) "interface" else if (decl.isEnum()) "enum" else "class"
+                        is KtClass -> when {
+                            decl.isInterface() -> "interface"
+                            decl.isEnum() -> "enum"
+                            else -> "class"
+                        }
                         is KtObjectDeclaration -> "object"
                         else -> "class"
                     },
@@ -497,7 +564,9 @@ object ProjectAnalyzer {
             val flavorRegex = Regex("""(\w+)\s*\{[^}]*dimension""")
             flavorRegex.findAll(content).forEach { flavors.add(it.groupValues[1]) }
 
-            val buildConfigRegex = Regex("""buildConfigField\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)""")
+            val buildConfigRegex = Regex(
+                """buildConfigField\s*\(\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\)"""
+            )
             buildConfigRegex.findAll(content).forEach {
                 buildConfigFields[it.groupValues[2]] = "${it.groupValues[1]}=${it.groupValues[3]}"
             }
@@ -530,7 +599,8 @@ object ProjectAnalyzer {
     private fun detectArchitecturePattern(modules: List<ModuleInfo>): String {
         val names = modules.map { it.name.lowercase() }
         return when {
-            names.any { it.contains("domain") } && names.any { it.contains("data") } -> "Clean Architecture"
+            names.any { it.contains("domain") }
+                && names.any { it.contains("data") } -> "Clean Architecture"
             names.any { it.contains("feature") } -> "Feature-based modularization"
             modules.size == 1 -> "Monolithic"
             else -> "Multi-module"
