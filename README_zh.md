@@ -138,14 +138,20 @@ cd android-studio-mcpserver
 
 ---
 
-## Cursor Skill 文件
+## Cursor 集成
 
-项目包含一个即用型 Cursor Skill 文件 `.cursor/skills/android-studio-mcp/SKILL.md`，它会教 AI Agent：
+### Skill
+
+项目包含一个即用型 Cursor Skill 文件 `.cursor/skills/MCP Code Intelligence/SKILL.md`，它会教 AI Agent：
 
 - 何时使用 MCP 工具而非 CLI
 - 4 种工作流模式（Bug 调查、功能开发、代码审查、代码库理解）
 - 工具链接模式
 - 常见错误规避
+
+### MCP-First 规则
+
+`.cursor/rules/mcp-first.mdc` 是一个始终生效的 Cursor Rule，强制 AI 执行 **MCP 优先策略**：代码探索和分析必须优先使用 MCP 工具（如用 `find_references` 代替 `grep`，用 `refactor` 代替 `sed`）。
 
 ---
 

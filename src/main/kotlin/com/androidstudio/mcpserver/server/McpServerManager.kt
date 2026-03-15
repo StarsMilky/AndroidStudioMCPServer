@@ -1,6 +1,7 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.androidstudio.mcpserver.server
 
-import com.androidstudio.mcpserver.util.MCP_JSON
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -18,6 +19,7 @@ import io.modelcontextprotocol.kotlin.sdk.server.ServerOptions
 import io.modelcontextprotocol.kotlin.sdk.server.mcpStreamableHttp
 import io.modelcontextprotocol.kotlin.sdk.types.Implementation
 import io.modelcontextprotocol.kotlin.sdk.types.ServerCapabilities
+import kotlinx.serialization.json.Json
 import java.io.IOException
 import java.net.ServerSocket
 import java.nio.file.Path
@@ -104,10 +106,14 @@ class McpServerManager : Disposable {
             val selectedPort = findFreePort(DEFAULT_PORT)
             port.set(selectedPort)
 
+            val mcpTransportJson = Json {
+                explicitNulls = false
+                encodeDefaults = true
+                ignoreUnknownKeys = true
+            }
+
             ktorServer = embeddedServer(CIO, host = "127.0.0.1", port = selectedPort) {
-                install(ContentNegotiation) {
-                    json(MCP_JSON)
-                }
+                install(ContentNegotiation) { json(mcpTransportJson) }
                 mcpStreamableHttp {
                     server
                 }

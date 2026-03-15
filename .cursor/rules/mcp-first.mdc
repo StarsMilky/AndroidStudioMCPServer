@@ -1,0 +1,41 @@
+---
+description: MCP 工具优先策略 — 强制 AI 在 Android 项目中优先使用 IDE 级别的 MCP 工具
+alwaysApply: true
+---
+
+# MCP 工具优先策略 (MCP-First Policy)
+
+本项目配置了 Android IDE MCP 服务器，必须优先使用。
+
+## 强制规则
+
+1. **代码探索/分析任务开始时，第一步必须读取 `.cursor/skills/MCP Code Intelligence/SKILL.md`**，然后按其中的 Workflow 执行
+2. **NEVER 使用 grep/rg 查找代码引用** → 用 `mcp-code-intel` 的 `find_references`
+3. **NEVER 猜测类型** → 用 `resolve_symbol`
+4. **NEVER 用 sed/文本替换做重命名** → 用 `refactor(operation="RENAME")`
+5. **新项目/新对话第一步** → `query_project(mode="OVERVIEW")`
+6. **需要理解框架结构时** → `query_framework(framework="HILT/ROOM/COMPOSE")`
+
+## 工具优先级
+
+| 任务 | 禁止 | 应该用 |
+|------|------|--------|
+| 查找符号引用 | `grep`, `rg`, `Grep` | `find_references(mode="USAGES")` |
+| 查看调用链 | 手动搜索 | `find_references(mode="CALLERS/CALLEES")` |
+| 了解项目结构 | 只用 Glob + Read | **先** `query_project(mode="OVERVIEW")` **再** 用文件工具补充 |
+| 理解类型 | 猜测或只看文件 | `resolve_symbol` |
+| 重命名 | StrReplace | `refactor(operation="RENAME")` |
+| 代码质量 | 肉眼检查 | `analyze_quality` |
+| 框架结构 | 手动翻文件 | `query_framework` |
+
+## 何时可以用文件工具
+
+- 读取/编辑具体文件内容 (MCP 不做文件编辑)
+- 查找文件名 (Glob)
+- 读取配置文件 (build.gradle, AndroidManifest 等)
+- MCP 工具返回结果后需要深入查看具体代码
+
+## 触发提醒
+
+当你发现自己正在用 `Grep` 或 `rg` 搜索代码引用时，**立即停下来**，改用 `find_references`。
+当你发现自己在用 `Glob` + `Read` 探索项目结构时，**先确认已经调用过 `query_project(mode="OVERVIEW")`**。

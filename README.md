@@ -138,14 +138,20 @@ The plugin adds an **MCP Code Intelligence** tool window to Android Studio:
 
 ---
 
-## Cursor Skill
+## Cursor Integration
 
-A ready-to-use Cursor Skill is included at `.cursor/skills/android-studio-mcp/SKILL.md`. It teaches the AI Agent:
+### Skill
+
+A ready-to-use Cursor Skill is included at `.cursor/skills/MCP Code Intelligence/SKILL.md`. It teaches the AI Agent:
 
 - When to use each MCP tool vs CLI
 - 4 workflow patterns (bug investigation, feature development, code review, codebase exploration)
 - Tool chaining patterns
 - Common mistakes to avoid
+
+### MCP-First Rule
+
+An always-on Cursor Rule at `.cursor/rules/mcp-first.mdc` enforces an **MCP-first policy**: the AI agent must prefer MCP tools over CLI equivalents (e.g. `find_references` instead of `grep`, `refactor` instead of `sed`).
 
 ---
 
