@@ -232,7 +232,8 @@ object ReferenceSearcher {
                 }
             }
             is KtCallExpression -> {
-                val ref = element.calleeExpression?.reference?.resolve()
+                val ref = element.calleeExpression?.references
+                    ?.firstNotNullOfOrNull { it.resolve() }
                     ?: element.references.firstNotNullOfOrNull { it.resolve() }
                 if (ref is PsiNamedElement) {
                     val key = when (ref) {
