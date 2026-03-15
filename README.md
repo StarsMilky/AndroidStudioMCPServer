@@ -4,9 +4,9 @@
 
 > **[中文文档](README_zh.md)**
 
-An Android Studio plugin that exposes **12 IDE-level code intelligence tools** to AI agents via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+An IntelliJ Platform plugin that exposes **12 IDE-level code intelligence tools** to AI agents via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). Works with **Android Studio**, **IntelliJ IDEA**, and other JetBrains IDEs.
 
-Instead of letting AI agents fumble through `grep` and file reads, give them direct access to the same semantic understanding that Android Studio uses internally — type resolution, reference graphs, call hierarchies, data flow analysis, and safe refactoring.
+Instead of letting AI agents fumble through `grep` and file reads, give them direct access to the same semantic understanding that your IDE uses internally — type resolution, reference graphs, call hierarchies, data flow analysis, and safe refactoring.
 
 ---
 
@@ -58,7 +58,7 @@ Evaluated on one 159-class Android project (Room + Hilt + Compose):
 
 ### Prerequisites
 
-- Android Studio **2025.2** (Ladybug) or later
+- IntelliJ-based IDE with **platform build 252+** (Android Studio 2025.2+ / IntelliJ IDEA 2025.2+)
 - JDK 21+
 
 ### Build & Install
@@ -71,11 +71,11 @@ cd android-studio-mcpserver
 
 Install the generated ZIP from `build/distributions/` via:
 
-**Android Studio → Settings → Plugins → ⚙️ → Install Plugin from Disk...**
+**IDE → Settings → Plugins → ⚙️ → Install Plugin from Disk...**
 
 ### Connect to Cursor
 
-The plugin auto-starts an MCP server on `http://127.0.0.1:17532/mcp` when Android Studio opens a project.
+The plugin auto-starts an MCP server on `http://127.0.0.1:17532/mcp` when the IDE opens a project.
 
 Add to your `~/.cursor/mcp.json`:
 
@@ -89,7 +89,7 @@ Add to your `~/.cursor/mcp.json`:
 }
 ```
 
-Or use the **"Configure Cursor"** button in the plugin's Tool Window (`MCP Code Intelligence` panel at the bottom of Android Studio).
+Or use the **"Configure Cursor"** button in the plugin's Tool Window (`MCP Code Intelligence` panel at the bottom of your IDE).
 
 ---
 
@@ -129,7 +129,7 @@ Or use the **"Configure Cursor"** button in the plugin's Tool Window (`MCP Code 
 
 ## Tool Window
 
-The plugin adds an **MCP Code Intelligence** tool window to Android Studio:
+The plugin adds an **MCP Code Intelligence** tool window to your IDE:
 
 - Server status and URL
 - Cursor configuration status
@@ -161,7 +161,7 @@ An always-on Cursor Rule at `.cursor/rules/mcp-first.mdc` enforces an **MCP-firs
 |-----------|---------|
 | Kotlin | 2.1.20 |
 | JVM Target | 21 |
-| IntelliJ Platform | 252+ (Android Studio 2025.2) |
+| IntelliJ Platform | 252+ (Android Studio 2025.2+ / IntelliJ IDEA 2025.2+) |
 | Kotlin MCP SDK | 0.9.0 |
 | Ktor | 3.2.3 |
 | kotlinx-serialization | 1.7.3 |

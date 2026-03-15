@@ -5,7 +5,7 @@ plugins {
     kotlin("plugin.serialization") version "2.1.20"
 }
 
-group = "com.androidstudio.mcpserver"
+group = "com.codeintel.mcpserver"
 version = "1.0.0"
 
 repositories {
@@ -17,7 +17,7 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        androidStudio("2025.2.2.7")
+        intellijIdeaCommunity("2025.2.6")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         bundledPlugin("com.intellij.java")

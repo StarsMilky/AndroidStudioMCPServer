@@ -1,5 +1,5 @@
-<idea-plugin url="https://github.com/StarsMilky/AndroidStudioMCPServer">
-    <id>com.androidstudio.mcpserver.MCPCodeIntelligence</id>
+<idea-plugin url="https://github.com/StarsMilky/MCPCodeIntelligence">
+    <id>com.codeintel.mcpserver.MCPCodeIntelligence</id>
     <name>MCP Code Intelligence</name>
     <vendor url="https://github.com/StarsMilky" email="starsmilky@users.noreply.github.com">StarsMilky</vendor>
 
@@ -8,7 +8,7 @@
 to AI agents through the <a href="https://modelcontextprotocol.io/">Model Context Protocol (MCP)</a>.</p>
 
 <p>Instead of relying on <code>grep</code> and file reads, AI agents get direct access to the same
-understanding Android Studio uses internally — type resolution, reference graphs, call hierarchies,
+understanding your IDE uses internally — type resolution, reference graphs, call hierarchies,
 data flow analysis, and safe cross-language refactoring.</p>
 
 <h3>Tools</h3>
@@ -42,15 +42,13 @@ data flow analysis, and safe cross-language refactoring.</p>
     <depends>com.intellij.modules.json</depends>
 
     <extensions defaultExtensionNs="com.intellij">
-        <applicationService
-            serviceImplementation="com.androidstudio.mcpserver.server.McpServerManager"/>
         <postStartupActivity
-            implementation="com.androidstudio.mcpserver.server.McpServerStartupActivity"/>
+            implementation="com.codeintel.mcpserver.server.McpServerStartupActivity"/>
         <toolWindow id="MCP Code Intelligence"
                     anchor="bottom"
                     secondary="true"
                     icon="AllIcons.Toolwindows.WebToolWindow"
-                    factoryClass="com.androidstudio.mcpserver.server.McpToolWindowFactory"/>
+                    factoryClass="com.codeintel.mcpserver.server.McpToolWindowFactory"/>
         <notificationGroup id="MCP Code Intelligence"
                            displayType="BALLOON"/>
     </extensions>

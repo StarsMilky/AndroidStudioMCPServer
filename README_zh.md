@@ -4,9 +4,9 @@
 
 > **[English Documentation](README.md)**
 
-一个 Android Studio 插件，通过 [MCP 协议](https://modelcontextprotocol.io/) 向 AI Agent 暴露 **12 个 IDE 级别的代码智能工具**。
+一个 IntelliJ 平台插件，通过 [MCP 协议](https://modelcontextprotocol.io/) 向 AI Agent 暴露 **12 个 IDE 级别的代码智能工具**。支持 **Android Studio**、**IntelliJ IDEA** 及其他 JetBrains IDE。
 
-让 AI Agent 不再依赖 `grep` 和文件读取来"猜测"代码结构，而是直接使用 Android Studio 内部的语义分析能力——类型解析、引用图谱、调用链、数据流分析和安全重构。
+让 AI Agent 不再依赖 `grep` 和文件读取来"猜测"代码结构，而是直接使用 IDE 内部的语义分析能力——类型解析、引用图谱、调用链、数据流分析和安全重构。
 
 ---
 
@@ -58,7 +58,7 @@
 
 ### 环境要求
 
-- Android Studio **2025.2**（Ladybug）或更新版本
+- 基于 IntelliJ Platform **252+** 的 IDE（Android Studio 2025.2+ / IntelliJ IDEA 2025.2+）
 - JDK 21+
 
 ### 构建安装
@@ -71,11 +71,11 @@ cd android-studio-mcpserver
 
 在 `build/distributions/` 目录下找到生成的 ZIP 文件，通过以下方式安装：
 
-**Android Studio → Settings → Plugins → ⚙️ → Install Plugin from Disk...**
+**IDE → Settings → Plugins → ⚙️ → Install Plugin from Disk...**
 
 ### 连接 Cursor
 
-插件会在 Android Studio 打开项目时自动启动 MCP 服务器，地址为 `http://127.0.0.1:17532/mcp`。
+插件会在 IDE 打开项目时自动启动 MCP 服务器，地址为 `http://127.0.0.1:17532/mcp`。
 
 在 `~/.cursor/mcp.json` 中添加：
 
@@ -89,7 +89,7 @@ cd android-studio-mcpserver
 }
 ```
 
-也可以使用 Android Studio 底部「MCP Code Intelligence」面板中的「Configure Cursor」按钮自动配置。
+也可以使用 IDE 底部「MCP Code Intelligence」面板中的「Configure Cursor」按钮自动配置。
 
 ---
 
@@ -129,7 +129,7 @@ cd android-studio-mcpserver
 
 ## 工具面板
 
-插件在 Android Studio 中添加了「MCP Code Intelligence」工具面板：
+插件在 IDE 中添加了「MCP Code Intelligence」工具面板：
 
 - 服务器状态和地址
 - Cursor 配置状态
@@ -161,7 +161,7 @@ cd android-studio-mcpserver
 |------|------|
 | Kotlin | 2.1.20 |
 | JVM 目标 | 21 |
-| IntelliJ Platform | 252+（Android Studio 2025.2）|
+| IntelliJ Platform | 252+（Android Studio 2025.2+ / IntelliJ IDEA 2025.2+）|
 | Kotlin MCP SDK | 0.9.0 |
 | Ktor | 3.2.3 |
 | kotlinx-serialization | 1.7.3 |

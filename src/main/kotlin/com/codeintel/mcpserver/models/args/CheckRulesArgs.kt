@@ -1,0 +1,12 @@
+package com.codeintel.mcpserver.models.args
+import kotlinx.serialization.Serializable
+
+@Serializable
+data class CheckRulesArgs(val rules: List<com.codeintel.mcpserver.models.args.ArchitectureRule>)
+
+@Serializable
+data class ArchitectureRule(
+    val name: String,
+    val source: String,
+    val mustNotDependOn: List<String>,
+)
