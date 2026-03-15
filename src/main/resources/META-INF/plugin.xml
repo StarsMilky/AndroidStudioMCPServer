@@ -1,10 +1,10 @@
-<idea-plugin>
+<idea-plugin url="https://github.com/StarsMilky/AndroidStudioMCPServer">
     <id>com.androidstudio.mcpserver.AndroidStudioMCPServer</id>
-    <name>Android Studio MCP - Code Intelligence</name>
-    <vendor url="https://github.com/StarsMilky">StarsMilky</vendor>
+    <name>MCP Code Intelligence</name>
+    <vendor url="https://github.com/StarsMilky" email="starsmilky@users.noreply.github.com">StarsMilky</vendor>
 
     <description><![CDATA[
-<p><b>Android Studio MCP – Code Intelligence</b> exposes <b>12 IDE-level semantic analysis tools</b>
+<p><b>MCP Code Intelligence</b> exposes <b>12 IDE-level semantic analysis tools</b>
 to AI agents through the <a href="https://modelcontextprotocol.io/">Model Context Protocol (MCP)</a>.</p>
 
 <p>Instead of relying on <code>grep</code> and file reads, AI agents get direct access to the same
