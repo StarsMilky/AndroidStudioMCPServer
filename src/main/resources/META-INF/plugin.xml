@@ -47,7 +47,7 @@ data flow analysis, and safe cross-language refactoring.</p>
         <toolWindow id="MCP Code Intelligence"
                     anchor="bottom"
                     secondary="true"
-                    icon="AllIcons.Toolwindows.WebToolWindow"
+                    icon="/icons/toolwindow.svg"
                     factoryClass="com.codeintel.mcpserver.server.McpToolWindowFactory"/>
         <notificationGroup id="MCP Code Intelligence"
                            displayType="BALLOON"/>

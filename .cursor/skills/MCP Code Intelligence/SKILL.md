@@ -20,11 +20,14 @@ always-apply: false
 
 | Task | Tool Call |
 |------|-----------|
+| Find a symbol by name | `resolve_symbol(name="UserRepository", kind="CLASS")` |
+| Find a symbol by FQN | `resolve_symbol(name="com.example.UserRepository")` |
 | What type is this? | `resolve_symbol(file, line, column)` |
-| Who uses this symbol? | `find_references(file, line, col, mode="USAGES")` |
-| Who calls this method? | `find_references(file, line, col, mode="CALLERS", depth=3)` |
+| Who uses this symbol? (by name) | `find_references(qualified_name="com.example.Foo", mode="USAGES")` |
+| Who uses this symbol? (by pos) | `find_references(file, line, col, mode="USAGES")` |
+| Who calls this method? | `find_references(qualified_name="com.Foo.bar", mode="CALLERS", depth=3)` |
 | What does this method call? | `find_references(file, line, col, mode="CALLEES")` |
-| Class hierarchy | `find_references(file, line, col, mode="TYPE_HIERARCHY")` |
+| Class hierarchy | `find_references(qualified_name="com.Foo", mode="TYPE_HIERARCHY")` |
 | Symbols at cursor | `get_scope(file, line, col, filter="ALL")` |
 | Project overview | `query_project(mode="OVERVIEW")` |
 | Dependency impact | `query_project(mode="DEPENDENCY", target_class="com.Foo")` |
@@ -41,12 +44,14 @@ always-apply: false
 ## Critical Rules
 
 1. **NEVER** use `grep`/`rg` for code references → `find_references(mode="USAGES")`
-2. **NEVER** guess types → `resolve_symbol`
-3. **NEVER** use `sed`/text-replace for renaming → `refactor(operation="RENAME")`
-4. **NEVER** start multi-file changes without → `checkpoint(operation="CREATE")`
-5. **ALWAYS** start with `query_project(mode="OVERVIEW")` on a new project
-6. **ALWAYS** use `resolve_symbol` when unsure about a type
-7. All enum values are **UPPERCASE**: `"USAGES"`, `"RENAME"`, `"OVERVIEW"`, not `"usages"`
+2. **NEVER** use `grep`/`rg` to locate a symbol → `resolve_symbol(name="SymbolName")`
+3. **NEVER** guess types → `resolve_symbol`
+4. **NEVER** use `sed`/text-replace for renaming → `refactor(operation="RENAME")`
+5. **NEVER** start multi-file changes without → `checkpoint(operation="CREATE")`
+6. **ALWAYS** start with `query_project(mode="OVERVIEW")` on a new project
+7. **ALWAYS** use `resolve_symbol(name=...)` to find symbol locations instead of grep
+8. All enum values are **UPPERCASE**: `"USAGES"`, `"RENAME"`, `"OVERVIEW"`, not `"usages"`
+9. `resolve_symbol` and `find_references` accept **two entry modes**: `file+line+column` (position) OR `name`/`qualified_name` (name-based). Use whichever is more convenient.
 
 ## Workflows
 
@@ -145,16 +150,32 @@ always-apply: false
 5. structural_search(pattern="class $X$ : ViewModel", file_type="kotlin")
    → Find all ViewModels to understand app screens
 
-6. For any symbol you encounter:
-   resolve_symbol → find_references(mode="USAGES") → find_references(mode="CALLERS")
+6. For any symbol you encounter (NO grep needed):
+   resolve_symbol(name="SymbolName") → find_references(file, line, col, mode="USAGES")
+   OR directly: find_references(qualified_name="com.example.SymbolName", mode="CALLERS")
 ```
 
 ## Tool Details
 
 ### resolve_symbol
-Returns: `name`, `qualified_name`, `kind` (CLASS/METHOD/FIELD/VARIABLE/PARAMETER/PROPERTY/PACKAGE/OBJECT/ENUM_ENTRY), `type`, `file`, `line`, `documentation`
+**Two entry modes:**
+- **By position:** `resolve_symbol(file, line, column)` — resolve symbol at exact code position
+- **By name:** `resolve_symbol(name="UserRepository")` — find symbol by simple name or FQN
+
+Name-based lookup supports:
+- Simple name: `name="UserRepository"` (uses `PsiShortNamesCache` index)
+- Fully-qualified name: `name="com.example.data.UserRepository"` (uses `JavaPsiFacade`)
+- Member lookup: `name="com.example.UserRepository.findById"`
+- Kind filter: `kind="CLASS"` / `"METHOD"` / `"FIELD"` / `"ALL"`
+
+Returns: `qualifiedType`, `declarationFile`, `declarationLine`, `declarationColumn`, `kind` (CLASS/METHOD/FIELD/VARIABLE/PARAMETER/PROPERTY/PACKAGE/OBJECT/ENUM_ENTRY), `totalMatches` (when multiple matches found)
 
 ### find_references
+**Two entry modes:**
+- **By position:** `find_references(file, line, column, mode="USAGES")`
+- **By qualified name:** `find_references(qualified_name="com.example.Foo", mode="USAGES")` — no need to know file+line+column
+
+Modes:
 - `mode="USAGES"` → all references to the symbol (with file, line, snippet, reference type)
 - `mode="CALLERS"` → methods that call this method (with call chain up to `depth` levels)
 - `mode="CALLEES"` → methods called inside this method body
@@ -218,8 +239,11 @@ Modes: `COMPLEXITY` (cyclomatic), `DEAD_CODE`, `CLONES`, `PATTERNS`, `ERROR_HAND
 ## Tool Chaining Patterns
 
 ```
-resolve_symbol → find_references
-  "I found this is a DAO method. Now show me all callers."
+resolve_symbol(name="UserDao") → find_references(file, line, col, mode="CALLERS")
+  "Find UserDao by name, then show me all callers. No grep needed."
+
+find_references(qualified_name="com.example.UserDao.findAll", mode="CALLERS")
+  "Directly find all callers of a method by qualified name. One call, no grep."
 
 query_project → query_framework → structural_search
   "Project uses Room. Let me find all entities, then search for raw SQL queries."

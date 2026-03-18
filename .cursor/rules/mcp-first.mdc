@@ -10,20 +10,22 @@ alwaysApply: true
 ## 强制规则
 
 1. **代码探索/分析任务开始时，第一步必须读取 `.cursor/skills/MCP Code Intelligence/SKILL.md`**，然后按其中的 Workflow 执行
-2. **NEVER 使用 grep/rg 查找代码引用** → 用 `mcp-code-intel` 的 `find_references`
-3. **NEVER 猜测类型** → 用 `resolve_symbol`
-4. **NEVER 用 sed/文本替换做重命名** → 用 `refactor(operation="RENAME")`
-5. **新项目/新对话第一步** → `query_project(mode="OVERVIEW")`
-6. **需要理解框架结构时** → `query_framework(framework="HILT/ROOM/COMPOSE")`
+2. **NEVER 使用 grep/rg 查找代码引用** → 用 `find_references(qualified_name="com.Foo", mode="USAGES")`
+3. **NEVER 使用 grep/rg 定位符号位置** → 用 `resolve_symbol(name="SymbolName")`
+4. **NEVER 猜测类型** → 用 `resolve_symbol`
+5. **NEVER 用 sed/文本替换做重命名** → 用 `refactor(operation="RENAME")`
+6. **新项目/新对话第一步** → `query_project(mode="OVERVIEW")`
+7. **需要理解框架结构时** → `query_framework(framework="HILT/ROOM/COMPOSE")`
 
 ## 工具优先级
 
 | 任务 | 禁止 | 应该用 |
 |------|------|--------|
-| 查找符号引用 | `grep`, `rg`, `Grep` | `find_references(mode="USAGES")` |
-| 查看调用链 | 手动搜索 | `find_references(mode="CALLERS/CALLEES")` |
+| 定位符号位置 | `grep`, `rg`, `Grep` | `resolve_symbol(name="SymbolName")` |
+| 查找符号引用 | `grep`, `rg`, `Grep` | `find_references(qualified_name="com.Foo", mode="USAGES")` |
+| 查看调用链 | 手动搜索 | `find_references(qualified_name="com.Foo.bar", mode="CALLERS")` |
 | 了解项目结构 | 只用 Glob + Read | **先** `query_project(mode="OVERVIEW")` **再** 用文件工具补充 |
-| 理解类型 | 猜测或只看文件 | `resolve_symbol` |
+| 理解类型 | 猜测或只看文件 | `resolve_symbol(name="...")` 或 `resolve_symbol(file, line, col)` |
 | 重命名 | StrReplace | `refactor(operation="RENAME")` |
 | 代码质量 | 肉眼检查 | `analyze_quality` |
 | 框架结构 | 手动翻文件 | `query_framework` |
@@ -37,5 +39,6 @@ alwaysApply: true
 
 ## 触发提醒
 
-当你发现自己正在用 `Grep` 或 `rg` 搜索代码引用时，**立即停下来**，改用 `find_references`。
+当你发现自己正在用 `Grep` 或 `rg` 搜索代码引用时，**立即停下来**，改用 `find_references(qualified_name=...)` 或 `resolve_symbol(name=...)`。
 当你发现自己在用 `Glob` + `Read` 探索项目结构时，**先确认已经调用过 `query_project(mode="OVERVIEW")`**。
+当你不知道某个符号在哪里时，**不要 grep**，直接用 `resolve_symbol(name="SymbolName")` 获取精确位置。

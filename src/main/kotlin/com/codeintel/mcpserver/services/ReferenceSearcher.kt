@@ -34,10 +34,31 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 object ReferenceSearcher {
 
     fun search(project: Project, args: FindReferencesArgs): ReferenceResult {
+        return if (args.qualifiedName != null) {
+            searchByQualifiedName(project, args)
+        } else {
+            searchByPosition(project, args)
+        }
+    }
+
+    private fun searchByPosition(project: Project, args: FindReferencesArgs): ReferenceResult {
+        val file = args.file ?: throw ToolException(
+            McpErrorCode.PSI_ERROR,
+            mapOf("reason" to "Either 'qualified_name' or 'file'+'line'+'column' must be provided")
+        )
+        val line = args.line ?: throw ToolException(
+            McpErrorCode.PSI_ERROR,
+            mapOf("reason" to "'line' is required when using file-based resolution")
+        )
+        val column = args.column ?: throw ToolException(
+            McpErrorCode.PSI_ERROR,
+            mapOf("reason" to "'column' is required when using file-based resolution")
+        )
+
         return PsiUtils.readAction(project) {
-            val vf = ProjectUtils.findFile(project, args.file)
+            val vf = ProjectUtils.findFile(project, file)
             val psiFile = ProjectUtils.getPsiFile(project, vf)
-            val offset = ProjectUtils.lineColumnToOffset(psiFile, args.line, args.column)
+            val offset = ProjectUtils.lineColumnToOffset(psiFile, line, column)
             val element = psiFile.findElementAt(offset)
                 ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
 
@@ -46,13 +67,54 @@ object ReferenceSearcher {
                 ?: element.parent
                 ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
 
-            when (args.mode) {
-                FindReferencesMode.USAGES -> searchUsages(project, target, args)
-                FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY ->
-                    searchCallHierarchy(project, target, args)
-                FindReferencesMode.CALLEES -> searchCallees(project, target, args)
-                FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
+            dispatchByMode(project, target, args)
+        }
+    }
+
+    private fun searchByQualifiedName(project: Project, args: FindReferencesArgs): ReferenceResult {
+        val fqn = args.qualifiedName!!
+
+        return PsiUtils.smartReadAction(project) {
+            val scope = GlobalSearchScope.projectScope(project)
+            val facade = com.intellij.psi.JavaPsiFacade.getInstance(project)
+
+            var target: PsiElement? = facade.findClass(fqn, scope)
+
+            if (target == null) {
+                val lastDot = fqn.lastIndexOf('.')
+                if (lastDot > 0) {
+                    val classPart = fqn.substring(0, lastDot)
+                    val memberName = fqn.substring(lastDot + 1)
+                    val ownerClass = facade.findClass(classPart, scope)
+                    if (ownerClass != null) {
+                        target = ownerClass.findMethodsByName(memberName, false).firstOrNull()
+                            ?: ownerClass.findFieldByName(memberName, false)
+                    }
+                }
             }
+
+            if (target == null) {
+                throw ToolException(
+                    McpErrorCode.SYMBOL_NOT_FOUND,
+                    mapOf("qualified_name" to fqn, "reason" to "No matching symbol found by qualified name")
+                )
+            }
+
+            dispatchByMode(project, target, args)
+        }
+    }
+
+    private fun dispatchByMode(
+        project: Project,
+        target: PsiElement,
+        args: FindReferencesArgs
+    ): ReferenceResult {
+        return when (args.mode) {
+            FindReferencesMode.USAGES -> searchUsages(project, target, args)
+            FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY ->
+                searchCallHierarchy(project, target, args)
+            FindReferencesMode.CALLEES -> searchCallees(project, target, args)
+            FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
         }
     }
 

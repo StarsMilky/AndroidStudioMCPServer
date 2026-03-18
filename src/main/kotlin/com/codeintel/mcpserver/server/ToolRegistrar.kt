@@ -106,7 +106,7 @@ object ToolRegistrar {
     private fun registerResolveSymbol(server: Server) {
         server.addTool(
             name = "resolve_symbol",
-            description = "Resolve symbol at any code position: returns fully-qualified type, declaration location, and symbol kind",
+            description = "Resolve symbol by position (file+line+column) OR by name. Returns fully-qualified type, declaration location (file, line, column), and symbol kind. Use name-based lookup to avoid grep.",
             inputSchema = ToolSchemas.resolveSymbol
         ) { request ->
             handleTool(
@@ -116,7 +116,7 @@ object ToolRegistrar {
                 SymbolInfo.serializer(),
                 SizePolicy.RESOLVE_SYMBOL
             ) { project, args ->
-                SymbolResolver.resolve(project, args.file, args.line, args.column)
+                SymbolResolver.resolve(project, args)
             }
         }
     }
@@ -124,7 +124,7 @@ object ToolRegistrar {
     private fun registerFindReferences(server: Server) {
         server.addTool(
             name = "find_references",
-            description = "Semantic reference search: usages, call hierarchy, callees, and type hierarchy (zero false positives)",
+            description = "Semantic reference search by position (file+line+column) OR by qualified name. Supports usages, call hierarchy, callees, and type hierarchy (zero false positives).",
             inputSchema = ToolSchemas.findReferences
         ) { request ->
             handleTool(

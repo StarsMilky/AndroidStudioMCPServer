@@ -14,8 +14,9 @@ Instead of letting AI agents fumble through `grep` and file reads, give them dir
 
 | Task | Without MCP | With MCP |
 |------|-------------|----------|
+| "Where is UserRepository?" | `grep` → noisy text matches | `resolve_symbol(name="UserRepository")` → exact declaration with file+line+column |
 | "What type is this?" | Read entire file, guess from context | `resolve_symbol` → exact qualified type in 50 tokens |
-| "Who calls this method?" | `grep` → noisy text matches with false positives | `find_references(CALLERS)` → semantic call chain |
+| "Who calls this method?" | `grep` → noisy text matches with false positives | `find_references(qualified_name="com.Foo.bar", mode="CALLERS")` → semantic call chain, no position needed |
 | "Is this nullable?" | Impossible via CLI | `analyze_data_flow(NULLABILITY)` → PSI-level inference |
 | "Rename safely" | `sed` → misses XML/Manifest references | `refactor(RENAME)` → updates all references across languages |
 | "Project architecture?" | Read 20+ files manually | `query_project(OVERVIEW)` → full picture in 1 call |
@@ -39,8 +40,8 @@ Evaluated on one 159-class Android project (Room + Hilt + Compose):
 
 | Tool | What It Does |
 |------|-------------|
-| `resolve_symbol` | Resolve type, kind, and qualified name at any code position |
-| `find_references` | Semantic usages, callers, callees, type hierarchy |
+| `resolve_symbol` | Resolve symbol by position (file+line+column) or by name — returns type, kind, qualified name, and declaration location |
+| `find_references` | Semantic usages, callers, callees, type hierarchy — by position or by qualified name |
 | `get_scope` | All visible symbols at a given position |
 | `query_project` | Project overview, dependency impact, API surface, build variants |
 | `query_framework` | Room / Retrofit / Hilt / Compose / Navigation analysis |

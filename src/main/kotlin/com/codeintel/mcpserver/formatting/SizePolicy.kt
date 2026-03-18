@@ -1,7 +1,7 @@
 package com.codeintel.mcpserver.formatting
 
 enum class SizePolicy(val maxBytes: Int) {
-    RESOLVE_SYMBOL(200),
+    RESOLVE_SYMBOL(512),
     FIND_REFERENCES(3072),
     GET_SCOPE(3584),
     REFACTOR(2048),

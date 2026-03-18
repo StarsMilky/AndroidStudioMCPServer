@@ -10,7 +10,7 @@ import com.intellij.ui.content.ContentFactory
 class McpToolWindowFactory : ToolWindowFactory, DumbAware {
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
-        val panel = McpToolWindowPanel()
+        val panel = McpToolWindowPanel(project)
         val content = ContentFactory.getInstance().createContent(panel, "", false)
         content.isCloseable = false
         Disposer.register(content, panel)

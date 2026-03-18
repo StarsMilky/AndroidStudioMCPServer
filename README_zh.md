@@ -14,8 +14,9 @@
 
 | 任务 | 没有 MCP | 有 MCP |
 |------|---------|--------|
+| "UserRepository 在哪里？" | `grep` → 噪声高、多余结果 | `resolve_symbol(name="UserRepository")` → 精确声明位置（file+line+column） |
 | "这个变量是什么类型？" | 读整个文件，靠上下文猜 | `resolve_symbol` → 精确限定类型，仅 50 tokens |
-| "谁调用了这个方法？" | `grep` → 噪声高、有误报 | `find_references(CALLERS)` → 语义级调用链 |
+| "谁调用了这个方法？" | `grep` → 噪声高、有误报 | `find_references(qualified_name="com.Foo.bar", mode="CALLERS")` → 语义级调用链，无需知道位置 |
 | "这个参数可为 null 吗？" | CLI 无法判断 | `analyze_data_flow(NULLABILITY)` → PSI 级推理 |
 | "安全重命名" | `sed` → 漏改 XML / Manifest | `refactor(RENAME)` → 跨语言更新所有引用 |
 | "项目整体架构？" | 手动读 20+ 个文件 | `query_project(OVERVIEW)` → 一次调用获取全貌 |
@@ -39,8 +40,8 @@
 
 | 工具 | 功能说明 |
 |------|---------|
-| `resolve_symbol` | 精确解析任意代码位置的符号类型、种类和限定名 |
-| `find_references` | 语义级引用查找、调用方、被调用方、类型层级 |
+| `resolve_symbol` | 按位置（file+line+column）或按名称解析符号——返回类型、种类、限定名和声明位置 |
+| `find_references` | 语义级引用查找——按位置或按全限定名，支持调用方、被调用方、类型层级 |
 | `get_scope` | 获取指定位置所有可见符号 |
 | `query_project` | 项目全景图、依赖影响分析、API 表面、构建变体 |
 | `query_framework` | Room / Retrofit / Hilt / Compose / Navigation 框架专项分析 |

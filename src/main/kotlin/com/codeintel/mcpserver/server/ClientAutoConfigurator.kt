@@ -4,6 +4,7 @@ import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.vfs.LocalFileSystem
 import kotlinx.serialization.json.Json
@@ -29,13 +30,16 @@ object ClientAutoConfigurator {
         val configuredUrl: String? = null
     )
 
-    private fun getCursorConfigFile(): File =
-        Path.of(System.getProperty("user.home"), ".cursor", "mcp.json").toFile()
+    private fun getCursorConfigFile(project: Project): File {
+        val basePath = project.basePath
+            ?: return Path.of(System.getProperty("user.home"), ".cursor", "mcp.json").toFile()
+        return Path.of(basePath, ".cursor", "mcp.json").toFile()
+    }
 
-    fun isCursorConfigured(): CursorConfigStatus {
-        val configFile = getCursorConfigFile()
-        val serverUrl = _root_ide_package_.com.codeintel.mcpserver.server.McpServerManager.getInstance().getUrl()
-        val entryName = _root_ide_package_.com.codeintel.mcpserver.server.McpServerManager.MCP_SERVER_ENTRY_NAME
+    fun isCursorConfigured(project: Project): CursorConfigStatus {
+        val configFile = getCursorConfigFile(project)
+        val serverUrl = McpServerManager.getInstance().getUrl()
+        val entryName = McpServerManager.MCP_SERVER_ENTRY_NAME
 
         if (!configFile.exists() || configFile.length() == 0L) {
             return CursorConfigStatus(false, configFile.absolutePath)
@@ -58,8 +62,8 @@ object ClientAutoConfigurator {
         }
     }
 
-    fun configureCursor(): ConfigResult {
-        val configFile = getCursorConfigFile()
+    fun configureCursor(project: Project): ConfigResult {
+        val configFile = getCursorConfigFile(project)
         return writeServerEntry(configFile, "Cursor")
     }
 
@@ -124,7 +128,7 @@ object ClientAutoConfigurator {
         }
     }
 
-    fun showResultNotification(result: ConfigResult) {
+    fun showResultNotification(project: Project, result: ConfigResult) {
         val type = if (result.success) NotificationType.INFORMATION else NotificationType.ERROR
         val title = if (result.success) "MCP Client Configured" else "MCP Client Configuration Failed"
 
@@ -140,16 +144,13 @@ object ClientAutoConfigurator {
                 ) {
                     val vFile = LocalFileSystem.getInstance().refreshAndFindFileByPath(result.filePath)
                     if (vFile != null) {
-                        val project = ProjectManager.getInstance().openProjects.firstOrNull()
-                        if (project != null) {
-                            FileEditorManager.getInstance(project).openFile(vFile, true)
-                        }
+                        FileEditorManager.getInstance(project).openFile(vFile, true)
                     }
                     notification.expire()
                 }
             })
         }
 
-        notification.notify(ProjectManager.getInstance().openProjects.firstOrNull())
+        notification.notify(project)
     }
 }

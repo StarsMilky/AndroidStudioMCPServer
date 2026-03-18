@@ -32,19 +32,24 @@ object ToolSchemas {
 
     val resolveSymbol = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("File path (relative to project root)"))
-            put("line", intProp("Line number (1-based)"))
-            put("column", intProp("Column number (1-based)"))
+            put("file", stringProp("File path (relative to project root). Required with line+column for position-based lookup."))
+            put("line", intProp("Line number (1-based). Required with file+column for position-based lookup."))
+            put("column", intProp("Column number (1-based). Required with file+line for position-based lookup."))
+            put("name", stringProp("Symbol name to look up (simple name like 'UserRepository' or fully-qualified like 'com.example.UserRepository'). Alternative to file+line+column."))
+            put("kind", enumProp("Filter by symbol kind (used with name-based lookup)", listOf("CLASS", "METHOD", "FIELD", "ALL")))
+            put("scope", stringProp("Search scope for name-based lookup: 'project' (default) or 'module:<name>'"))
+            put("limit", intProp("Max results for name-based lookup (default 10)"))
             put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
-        required = listOf("file", "line", "column")
+        required = emptyList()
     )
 
     val findReferences = ToolSchema(
         properties = buildJsonObject {
-            put("file", stringProp("File path (relative to project root)"))
-            put("line", intProp("Line number (1-based)"))
-            put("column", intProp("Column number (1-based)"))
+            put("file", stringProp("File path (relative to project root). Required with line+column for position-based lookup."))
+            put("line", intProp("Line number (1-based). Required with file+column for position-based lookup."))
+            put("column", intProp("Column number (1-based). Required with file+line for position-based lookup."))
+            put("qualified_name", stringProp("Fully-qualified symbol name (e.g. 'com.example.UserRepository' or 'com.example.UserRepository.findById'). Alternative to file+line+column."))
             put(
                 "mode",
                 enumProp(
@@ -61,7 +66,7 @@ object ToolSchemas {
             put("limit", intProp("Page size (default 20)"))
             put("project_path", stringProp("Project path (optional, for multi-project setups)"))
         },
-        required = listOf("file", "line", "column")
+        required = emptyList()
     )
 
     val getScope = ToolSchema(

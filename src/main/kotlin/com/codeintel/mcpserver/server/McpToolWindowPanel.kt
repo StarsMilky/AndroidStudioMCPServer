@@ -30,7 +30,7 @@ import javax.swing.SwingConstants
 import javax.swing.Timer
 import javax.swing.table.DefaultTableCellRenderer
 
-class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
+class McpToolWindowPanel(private val project: com.intellij.openapi.project.Project) : JPanel(BorderLayout()), Disposable {
 
     private val statusIcon = JBLabel()
     private val statusText = JBLabel()
@@ -231,9 +231,9 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
     private fun wireActions() {
         cursorActionButton.addActionListener {
             ApplicationManager.getApplication().executeOnPooledThread {
-                val result = ClientAutoConfigurator.configureCursor()
+                val result = ClientAutoConfigurator.configureCursor(project)
                 ApplicationManager.getApplication().invokeLater {
-                    ClientAutoConfigurator.showResultNotification(result)
+                    ClientAutoConfigurator.showResultNotification(project, result)
                     refreshCursorStatus()
                 }
             }
@@ -303,7 +303,7 @@ class McpToolWindowPanel : JPanel(BorderLayout()), Disposable {
     }
 
     private fun refreshCursorStatus() {
-        val status = ClientAutoConfigurator.isCursorConfigured()
+        val status = ClientAutoConfigurator.isCursorConfigured(project)
         if (status.configured) {
             cursorStatusIcon.icon = AllIcons.RunConfigurations.TestPassed
             val urlMatch = status.configuredUrl == McpServerManager.getInstance().getUrl()

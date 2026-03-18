@@ -8,6 +8,8 @@ data class SymbolInfo(
     val declarationFile: String,
     val declarationLine: Int,
     val kind: com.codeintel.mcpserver.models.results.SymbolKind,
+    val declarationColumn: Int = 0,
+    val totalMatches: Int? = null,
 )
 
 @Serializable
