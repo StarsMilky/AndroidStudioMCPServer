@@ -293,6 +293,54 @@ interface LanguageAdapter {
         relPath: String
     ): List<com.codeintel.mcpserver.models.results.QualityIssue>? = null
 
+    // -------- Project overview --------
+
+    /**
+     * Emit class entries grouped by package name for this file (null if not owned).
+     * Used by [com.codeintel.mcpserver.services.ProjectAnalyzer] to build the overview class map.
+     */
+    fun collectClassEntries(
+        project: Project,
+        file: PsiFile,
+        includeMembers: Boolean
+    ): Map<String, List<com.codeintel.mcpserver.models.results.ClassEntry>>? = null
+
+    /**
+     * Return hub/key class candidates found in [file]; null if file not owned.
+     * Each candidate includes its module name (resolved by the caller).
+     */
+    fun collectKeyClassCandidates(
+        project: Project,
+        file: PsiFile,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        moduleName: String
+    ): List<com.codeintel.mcpserver.models.results.KeyClassInfo>? = null
+
+    /**
+     * Return API surface entries (public classes/methods) for this file; null if not owned.
+     */
+    fun collectApiClasses(
+        project: Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ApiClass>? = null
+
+    /**
+     * Find a class-like declaration by fully-qualified name within [scope]; null if
+     * this adapter cannot locate one. Used as a fallback after [JavaPsiFacade.findClass].
+     */
+    fun findClassByFqName(
+        project: Project,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        fqName: String
+    ): PsiElement? = null
+
+    /**
+     * Return the enclosing class-like declaration for [element] if this adapter
+     * owns the enclosing element; null otherwise. Used for dependency hop expansion.
+     */
+    fun getEnclosingClassLike(element: PsiElement): PsiElement? = null
+
+
     companion object {
         val EP_NAME: ExtensionPointName<LanguageAdapter> =
             ExtensionPointName.create("com.codeintel.mcpserver.languageAdapter")

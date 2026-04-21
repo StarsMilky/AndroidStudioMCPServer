@@ -603,4 +603,158 @@ class KotlinLanguageAdapter : LanguageAdapter {
 
     private fun countOccurrences(text: String, pattern: String): Int =
         try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
+
+    // -------- Project overview --------
+
+    override fun collectClassEntries(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        includeMembers: Boolean
+    ): Map<String, List<com.codeintel.mcpserver.models.results.ClassEntry>>? {
+        if (file !is KtFile) return null
+        val pkg = file.packageFqName.asString().ifEmpty { "<root>" }
+        val entries = file.declarations
+            .filterIsInstance<KtClassOrObject>()
+            .map { buildKotlinClassEntry(it, includeMembers) }
+        return mapOf(pkg to entries)
+    }
+
+    override fun collectKeyClassCandidates(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        moduleName: String
+    ): List<com.codeintel.mcpserver.models.results.KeyClassInfo>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.KeyClassInfo>()
+        for (decl in file.declarations.filterIsInstance<KtClassOrObject>()) {
+            val name = decl.fqName?.asString() ?: continue
+            val refCount = try {
+                com.intellij.psi.search.searches.ReferencesSearch.search(decl, scope).findAll().size
+            } catch (_: Exception) { 0 }
+            if (refCount < 3) continue
+            val role = when {
+                decl.annotationEntries.any { it.shortName?.asString() == "HiltAndroidApp" } -> "application"
+                decl.annotationEntries.any { it.shortName?.asString() == "AndroidEntryPoint" } -> "entry_point"
+                decl.annotationEntries.any { it.shortName?.asString() == "HiltViewModel" } -> "viewmodel"
+                name.contains("Repository") -> "repository"
+                name.contains("UseCase") -> "use_case"
+                else -> "hub"
+            }
+            out.add(com.codeintel.mcpserver.models.results.KeyClassInfo(
+                name = name,
+                module = moduleName,
+                role = role,
+                references = refCount
+            ))
+        }
+        return out
+    }
+
+    override fun collectApiClasses(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ApiClass>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.ApiClass>()
+        for (decl in file.declarations) {
+            if (decl !is KtClassOrObject) continue
+            if (decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD)) continue
+            val methods = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+                .filter { !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
+                .map { fn ->
+                    val params = fn.valueParameters.joinToString(", ") {
+                        "${it.name ?: "_"}: ${it.typeReference?.text ?: "Any"}"
+                    }
+                    com.codeintel.mcpserver.models.results.ApiMethod(
+                        name = fn.name ?: "<anonymous>",
+                        signature = "fun ${fn.name}($params): ${fn.typeReference?.text ?: "Unit"}",
+                        visibility = if (fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD))
+                            "internal" else "public"
+                    )
+                }
+            out.add(com.codeintel.mcpserver.models.results.ApiClass(
+                name = decl.fqName?.asString() ?: decl.name ?: "<anonymous>",
+                kind = when (decl) {
+                    is KtClass -> when {
+                        decl.isInterface() -> "interface"
+                        decl.isEnum() -> "enum"
+                        else -> "class"
+                    }
+                    is org.jetbrains.kotlin.psi.KtObjectDeclaration -> "object"
+                    else -> "class"
+                },
+                methods = methods
+            ))
+        }
+        return out
+    }
+
+    override fun findClassByFqName(
+        project: com.intellij.openapi.project.Project,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        fqName: String
+    ): PsiElement? {
+        val simple = fqName.substringAfterLast(".")
+        for (vf in com.intellij.psi.search.FilenameIndex.getAllFilesByExt(project, "kt", scope)) {
+            val pf = com.intellij.psi.PsiManager.getInstance(project).findFile(vf) as? KtFile ?: continue
+            val found = PsiTreeUtil.findChildrenOfType(pf, KtClass::class.java)
+                .firstOrNull { it.fqName?.asString() == fqName || it.name == simple }
+            if (found != null) return found
+        }
+        return null
+    }
+
+    override fun getEnclosingClassLike(element: PsiElement): PsiElement? =
+        PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java)
+
+    private fun buildKotlinClassEntry(
+        decl: KtClassOrObject,
+        includeMembers: Boolean
+    ): com.codeintel.mcpserver.models.results.ClassEntry {
+        val supers = decl.superTypeListEntries.map { it.text.substringBefore("(").trim() }
+        val annos = decl.annotationEntries.map { "@${it.shortName?.asString() ?: ""}" }
+        val visibility = when {
+            decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) -> "private"
+            decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD) -> "internal"
+            else -> "public"
+        }
+        val kind = when (decl) {
+            is KtClass -> when {
+                decl.isInterface() -> "interface"
+                decl.isEnum() -> "enum"
+                decl.isData() -> "data class"
+                decl.isSealed() -> "sealed class"
+                else -> "class"
+            }
+            is org.jetbrains.kotlin.psi.KtObjectDeclaration -> "object"
+            else -> "class"
+        }
+        val members = if (includeMembers) {
+            val fns = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+                .filter { !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
+                .map { fn ->
+                    val params = fn.valueParameters.joinToString(", ") {
+                        "${it.name}: ${it.typeReference?.text ?: "Any"}"
+                    }
+                    val ret = fn.typeReference?.text?.let { ": $it" } ?: ""
+                    "${fn.name}($params)$ret"
+                }
+            val props = PsiTreeUtil.findChildrenOfType(decl, KtProperty::class.java)
+                .filter {
+                    it.parent == decl.body &&
+                        !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD)
+                }
+                .map { "${it.name}: ${it.typeReference?.text ?: "?"}" }
+            props + fns
+        } else null
+        return com.codeintel.mcpserver.models.results.ClassEntry(
+            name = decl.name ?: "<anonymous>",
+            kind = kind,
+            visibility = visibility,
+            superTypes = supers.ifEmpty { null },
+            annotations = annos.ifEmpty { null },
+            members = members?.ifEmpty { null }
+        )
+    }
 }

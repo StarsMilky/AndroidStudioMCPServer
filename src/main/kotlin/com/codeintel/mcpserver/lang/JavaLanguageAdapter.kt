@@ -517,4 +517,132 @@ class JavaLanguageAdapter : LanguageAdapter {
 
     private fun countOccurrences(text: String, pattern: String): Int =
         try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
+
+    // -------- Project overview --------
+
+    override fun collectClassEntries(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        includeMembers: Boolean
+    ): Map<String, List<com.codeintel.mcpserver.models.results.ClassEntry>>? {
+        if (file !is PsiJavaFile) return null
+        val pkg = file.packageName.ifEmpty { "<root>" }
+        val entries = file.classes.map { buildJavaClassEntry(it, includeMembers) }
+        return mapOf(pkg to entries)
+    }
+
+    override fun collectKeyClassCandidates(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        moduleName: String
+    ): List<com.codeintel.mcpserver.models.results.KeyClassInfo>? {
+        // Java contributes to key classes via same heuristics as Kotlin, though
+        // the legacy implementation only walked .kt files. We opt-in Java too.
+        if (file !is PsiJavaFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.KeyClassInfo>()
+        for (cls in file.classes) {
+            val name = cls.qualifiedName ?: continue
+            val refCount = try {
+                com.intellij.psi.search.searches.ReferencesSearch.search(cls, scope).findAll().size
+            } catch (_: Exception) { 0 }
+            if (refCount < 3) continue
+            val role = when {
+                name.contains("Repository") -> "repository"
+                name.contains("UseCase") -> "use_case"
+                else -> "hub"
+            }
+            out.add(com.codeintel.mcpserver.models.results.KeyClassInfo(
+                name = name,
+                module = moduleName,
+                role = role,
+                references = refCount
+            ))
+        }
+        return out
+    }
+
+    override fun collectApiClasses(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ApiClass>? {
+        if (file !is PsiJavaFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.ApiClass>()
+        for (cls in file.classes) {
+            if (!cls.hasModifierProperty(com.intellij.psi.PsiModifier.PUBLIC)) continue
+            val methods = cls.methods
+                .filter { it.hasModifierProperty(com.intellij.psi.PsiModifier.PUBLIC) }
+                .map { m ->
+                    val params = m.parameterList.parameters.joinToString(", ") {
+                        "${it.type.canonicalText} ${it.name}"
+                    }
+                    com.codeintel.mcpserver.models.results.ApiMethod(
+                        name = m.name,
+                        signature = "${m.returnType?.canonicalText ?: "void"} ${m.name}($params)",
+                        visibility = "public"
+                    )
+                }
+            out.add(com.codeintel.mcpserver.models.results.ApiClass(
+                name = cls.qualifiedName ?: cls.name ?: "<anonymous>",
+                kind = when {
+                    cls.isInterface -> "interface"
+                    cls.isEnum -> "enum"
+                    cls.hasModifierProperty(com.intellij.psi.PsiModifier.ABSTRACT) -> "abstract_class"
+                    else -> "class"
+                },
+                methods = methods
+            ))
+        }
+        return out
+    }
+
+    override fun findClassByFqName(
+        project: com.intellij.openapi.project.Project,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        fqName: String
+    ): PsiElement? = com.intellij.psi.JavaPsiFacade.getInstance(project).findClass(fqName, scope)
+
+    override fun getEnclosingClassLike(element: PsiElement): PsiElement? =
+        PsiTreeUtil.getParentOfType(element, PsiClass::class.java)
+
+    private fun buildJavaClassEntry(
+        cls: PsiClass,
+        includeMembers: Boolean
+    ): com.codeintel.mcpserver.models.results.ClassEntry {
+        val supers = mutableListOf<String>()
+        cls.superClass?.let {
+            if (it.qualifiedName != "java.lang.Object") supers.add(it.name ?: "")
+        }
+        cls.interfaces.forEach { supers.add(it.name ?: "") }
+        val annos = cls.annotations.mapNotNull { "@${it.qualifiedName?.substringAfterLast(".")}" }
+        val kind = when {
+            cls.isInterface -> "interface"
+            cls.isEnum -> "enum"
+            cls.hasModifierProperty(com.intellij.psi.PsiModifier.ABSTRACT) -> "abstract class"
+            else -> "class"
+        }
+        val visibility = when {
+            cls.hasModifierProperty(com.intellij.psi.PsiModifier.PRIVATE) -> "private"
+            cls.hasModifierProperty(com.intellij.psi.PsiModifier.PROTECTED) -> "protected"
+            else -> "public"
+        }
+        val members = if (includeMembers) {
+            cls.methods
+                .filter { it.hasModifierProperty(com.intellij.psi.PsiModifier.PUBLIC) }
+                .map { m ->
+                    val params = m.parameterList.parameters.joinToString(", ") {
+                        "${it.type.presentableText} ${it.name}"
+                    }
+                    "${m.name}($params): ${m.returnType?.presentableText ?: "void"}"
+                }
+        } else null
+        return com.codeintel.mcpserver.models.results.ClassEntry(
+            name = cls.name ?: "<anonymous>",
+            kind = kind,
+            visibility = visibility,
+            superTypes = supers.ifEmpty { null },
+            annotations = annos.ifEmpty { null },
+            members = members?.ifEmpty { null }
+        )
+    }
 }
