@@ -131,4 +131,127 @@ class JavaLanguageAdapter : LanguageAdapter {
     }
 
     override fun asPsiClass(element: PsiElement): PsiClass? = element as? PsiClass
+
+    override fun collectBlockLocals(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val block = element as? com.intellij.psi.PsiCodeBlock ?: return null
+        return block.statements
+            .filterIsInstance<com.intellij.psi.PsiDeclarationStatement>()
+            .flatMap { decl ->
+                decl.declaredElements.filterIsInstance<PsiLocalVariable>().map { v ->
+                    com.codeintel.mcpserver.models.results.ScopeSymbol(
+                        name = v.name,
+                        type = v.type.canonicalText,
+                        kind = "variable"
+                    )
+                }
+            }
+    }
+
+    override fun collectMethodParameters(
+        method: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val m = method as? PsiMethod ?: return null
+        return m.parameterList.parameters.map { p ->
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = p.name,
+                type = p.type.canonicalText,
+                kind = "variable"
+            )
+        }
+    }
+
+    override fun collectClassMembersAt(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val cls = PsiTreeUtil.getParentOfType(element, PsiClass::class.java) ?: return null
+        val result = mutableListOf<com.codeintel.mcpserver.models.results.ScopeSymbol>()
+        cls.fields.forEach { f ->
+            result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = f.name, type = f.type.canonicalText, kind = "property"))
+        }
+        cls.methods.forEach { m ->
+            result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = m.name, type = m.returnType?.canonicalText ?: "void", kind = "method"))
+        }
+        return result
+    }
+
+    override fun collectImportedSymbols(
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val pf = file as? PsiJavaFile ?: return null
+        return pf.importList?.importStatements?.mapNotNull { imp ->
+            val qn = imp.qualifiedName ?: return@mapNotNull null
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = qn.substringAfterLast('.'),
+                type = qn,
+                kind = "type"
+            )
+        } ?: emptyList()
+    }
+
+    override fun setFilePackage(file: PsiFile, targetPackage: String): Boolean {
+        val pf = file as? PsiJavaFile ?: return false
+        val pkg = pf.packageStatement ?: return false
+        val factory = com.intellij.psi.PsiElementFactory.getInstance(file.project)
+        pkg.replace(factory.createPackageStatement(targetPackage))
+        return true
+    }
+
+    override fun listMovableDeclarations(file: PsiFile): List<PsiElement>? =
+        (file as? PsiJavaFile)?.classes?.toList()
+
+    override fun changeReturnType(method: PsiElement, newReturnType: String): Boolean {
+        val m = method as? PsiMethod ?: return false
+        val factory = com.intellij.psi.PsiElementFactory.getInstance(m.project)
+        val newType = factory.createTypeFromText(newReturnType, m)
+        val old = m.returnTypeElement ?: return false
+        old.replace(factory.createTypeElement(newType))
+        return true
+    }
+
+    override fun changeParameters(
+        method: PsiElement,
+        parameters: List<com.codeintel.mcpserver.models.args.ParameterChange>
+    ): Boolean {
+        val m = method as? PsiMethod ?: return false
+        val factory = com.intellij.psi.PsiElementFactory.getInstance(m.project)
+        val paramList = m.parameterList
+        for (p in paramList.parameters) { p.delete() }
+        for (p in parameters) {
+            val type = factory.createTypeFromText(p.type, m)
+            paramList.add(factory.createParameter(p.name, type))
+        }
+        return true
+    }
+
+    override fun findContainingClassLike(
+        file: PsiFile,
+        startOffset: Int,
+        endOffset: Int
+    ): PsiElement? {
+        if (file !is PsiJavaFile) return null
+        return PsiTreeUtil.findChildrenOfType(file, PsiClass::class.java)
+            .firstOrNull { it.textRange.startOffset <= startOffset && it.textRange.endOffset >= endOffset }
+    }
+
+    override fun extractMethodInClass(
+        containingClass: PsiElement,
+        methodName: String,
+        body: String
+    ): Boolean {
+        val cls = containingClass as? PsiClass ?: return false
+        val factory = com.intellij.psi.PsiElementFactory.getInstance(cls.project)
+        val methodText = "private void $methodName() {\n$body\n}"
+        val newMethod = factory.createMethodFromText(methodText, cls)
+        cls.add(newMethod)
+        return true
+    }
+
+    override fun extractMethodCallExpression(
+        containingClass: PsiElement,
+        methodName: String
+    ): String? = if (containingClass is PsiClass) "$methodName();" else null
 }

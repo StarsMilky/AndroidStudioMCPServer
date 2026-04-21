@@ -132,4 +132,158 @@ class KotlinLanguageAdapter : LanguageAdapter {
         is KtClassOrObject -> element.toLightClass()
         else -> null
     }
+
+    override fun collectBlockLocals(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val block = element as? org.jetbrains.kotlin.psi.KtBlockExpression ?: return null
+        return block.statements
+            .filterIsInstance<KtProperty>()
+            .filter { it.isLocal }
+            .mapNotNull { p ->
+                val name = p.name ?: return@mapNotNull null
+                com.codeintel.mcpserver.models.results.ScopeSymbol(
+                    name = name,
+                    type = p.typeReference?.text ?: "Unknown",
+                    kind = "variable"
+                )
+            }
+    }
+
+    override fun collectMethodParameters(
+        method: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val fn = method as? KtNamedFunction ?: return null
+        return fn.valueParameters.mapNotNull { p ->
+            val name = p.name ?: return@mapNotNull null
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = name,
+                type = p.typeReference?.text ?: "Unknown",
+                kind = "variable"
+            )
+        }
+    }
+
+    override fun collectClassMembersAt(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val cls = PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java) ?: return null
+        val result = mutableListOf<com.codeintel.mcpserver.models.results.ScopeSymbol>()
+        cls.declarations.forEach { decl ->
+            when (decl) {
+                is KtProperty -> decl.name?.let { n ->
+                    result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                        name = n, type = decl.typeReference?.text ?: "Unknown", kind = "property"))
+                }
+                is KtNamedFunction -> decl.name?.let { n ->
+                    result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                        name = n, type = decl.typeReference?.text ?: "Unit", kind = "method"))
+                }
+            }
+        }
+        return result
+    }
+
+    override fun collectImportedSymbols(
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val kt = file as? KtFile ?: return null
+        return kt.importDirectives.mapNotNull { imp ->
+            val fq = imp.importedFqName ?: return@mapNotNull null
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = fq.shortName().asString(),
+                type = fq.asString(),
+                kind = "type"
+            )
+        }
+    }
+
+    override fun collectExtensionFunctions(
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val kt = file as? KtFile ?: return null
+        return kt.declarations.filterIsInstance<KtNamedFunction>()
+            .filter { it.receiverTypeReference != null }
+            .mapNotNull { f ->
+                val name = f.name ?: return@mapNotNull null
+                com.codeintel.mcpserver.models.results.ScopeSymbol(
+                    name = name,
+                    type = "${f.receiverTypeReference?.text}.() -> ${f.typeReference?.text ?: "Unit"}",
+                    kind = "method"
+                )
+            }
+    }
+
+    override fun setFilePackage(file: PsiFile, targetPackage: String): Boolean {
+        val kt = file as? KtFile ?: return false
+        val packageDirective = kt.packageDirective ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(file.project)
+        val newDirective = factory.createPackageDirective(
+            org.jetbrains.kotlin.name.FqName(targetPackage)
+        )
+        packageDirective.replace(newDirective)
+        return true
+    }
+
+    override fun listMovableDeclarations(file: PsiFile): List<PsiElement>? =
+        (file as? KtFile)?.declarations?.toList()
+
+    override fun changeReturnType(method: PsiElement, newReturnType: String): Boolean {
+        val fn = method as? KtNamedFunction ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(fn.project)
+        val typeRef = fn.typeReference
+        val fragment = factory.createTypeCodeFragment(newReturnType, fn).getContentElement()
+            ?: return false
+        if (typeRef != null) {
+            typeRef.replace(fragment)
+        } else {
+            fn.setTypeReference(fragment as org.jetbrains.kotlin.psi.KtTypeReference)
+        }
+        return true
+    }
+
+    override fun changeParameters(
+        method: PsiElement,
+        parameters: List<com.codeintel.mcpserver.models.args.ParameterChange>
+    ): Boolean {
+        val fn = method as? KtNamedFunction ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(fn.project)
+        val paramList = fn.valueParameterList ?: return false
+        val newParams = parameters.joinToString(", ") { p ->
+            val default = if (p.defaultValue != null) " = ${p.defaultValue}" else ""
+            "${p.name}: ${p.type}$default"
+        }
+        val newFunction = factory.createFunction("fun temp($newParams) {}")
+        paramList.replace(newFunction.valueParameterList!!)
+        return true
+    }
+
+    override fun findContainingClassLike(
+        file: PsiFile,
+        startOffset: Int,
+        endOffset: Int
+    ): PsiElement? {
+        if (file !is KtFile) return null
+        return PsiTreeUtil.findChildrenOfType(file, KtClass::class.java)
+            .firstOrNull { it.textRange.startOffset <= startOffset && it.textRange.endOffset >= endOffset }
+    }
+
+    override fun extractMethodInClass(
+        containingClass: PsiElement,
+        methodName: String,
+        body: String
+    ): Boolean {
+        val cls = containingClass as? KtClass ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(cls.project)
+        val newMethod = factory.createFunction("private fun $methodName() {\n$body\n}")
+        val classBody = cls.body ?: return false
+        classBody.addBefore(newMethod, classBody.rBrace)
+        classBody.addBefore(factory.createNewLine(), classBody.rBrace)
+        return true
+    }
+
+    override fun extractMethodCallExpression(
+        containingClass: PsiElement,
+        methodName: String
+    ): String? = if (containingClass is KtClass) "$methodName()" else null
 }

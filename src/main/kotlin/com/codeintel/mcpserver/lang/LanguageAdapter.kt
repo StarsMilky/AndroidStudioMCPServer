@@ -143,6 +143,90 @@ interface LanguageAdapter {
      */
     fun asPsiClass(element: PsiElement): PsiClass? = null
 
+    /**
+     * If [element] is a block / scope container owned by this language,
+     * return the local variables declared in it. Null otherwise.
+     */
+    fun collectBlockLocals(element: PsiElement): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? = null
+
+    /**
+     * If [method] is a method-like declaration owned by this language,
+     * return its parameters as scope symbols. Null otherwise.
+     */
+    fun collectMethodParameters(method: PsiElement): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? = null
+
+    /**
+     * If [element] is inside a class/object/namespace owned by this language,
+     * return the members (fields, methods, properties) of that container.
+     * Null otherwise.
+     */
+    fun collectClassMembersAt(element: PsiElement): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? = null
+
+    /**
+     * Return the imported symbols declared in [file] for this language, or null
+     * if the file is not owned by this adapter.
+     */
+    fun collectImportedSymbols(file: PsiFile): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? = null
+
+    /**
+     * Return extension functions declared at file top-level if the language has
+     * such a concept (Kotlin). Empty list / null otherwise.
+     */
+    fun collectExtensionFunctions(file: PsiFile): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? = null
+
+    /**
+     * For refactor.MOVE: change the package directive of [file] to
+     * [targetPackage] using language-specific PSI. Return true if handled,
+     * false if the file isn't owned by this adapter.
+     */
+    fun setFilePackage(file: PsiFile, targetPackage: String): Boolean = false
+
+    /**
+     * If [file] is owned by this language, return all top-level class-like
+     * declarations plus their nested declarations suitable for MOVE's
+     * list-declarations step. Null otherwise.
+     */
+    fun listMovableDeclarations(file: PsiFile): List<PsiElement>? = null
+
+    /**
+     * Apply a CHANGE_SIGNATURE return-type edit to [method] using language
+     * specific PSI. Return true if the edit was applied, false otherwise.
+     */
+    fun changeReturnType(method: PsiElement, newReturnType: String): Boolean = false
+
+    /**
+     * Apply a CHANGE_SIGNATURE parameter-list edit to [method] using language
+     * specific PSI. Return true if the edit was applied, false otherwise.
+     */
+    fun changeParameters(
+        method: PsiElement,
+        parameters: List<com.codeintel.mcpserver.models.args.ParameterChange>
+    ): Boolean = false
+
+    /**
+     * Find the innermost class-like declaration (Java class, Kotlin class/object,
+     * etc.) that fully contains the given text offset range in [file], if that
+     * file is owned by this adapter. Null otherwise.
+     */
+    fun findContainingClassLike(file: PsiFile, startOffset: Int, endOffset: Int): PsiElement? = null
+
+    /**
+     * Insert a new private method named [methodName] with [body] as body into
+     * [containingClass] using language specific PSI. Return true if inserted.
+     */
+    fun extractMethodInClass(
+        containingClass: PsiElement,
+        methodName: String,
+        body: String
+    ): Boolean = false
+
+    /**
+     * Returns the call-site expression to replace the extracted block with
+     * (e.g. `foo()` for Kotlin, `foo();` for Java). Null if this adapter does
+     * not own [containingClass].
+     */
+    fun extractMethodCallExpression(containingClass: PsiElement, methodName: String): String? = null
+
     companion object {
         val EP_NAME: ExtensionPointName<LanguageAdapter> =
             ExtensionPointName.create("com.codeintel.mcpserver.languageAdapter")
