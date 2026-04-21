@@ -757,4 +757,261 @@ class KotlinLanguageAdapter : LanguageAdapter {
             members = members?.ifEmpty { null }
         )
     }
+
+    // -------- Framework refinement hooks --------
+
+    override fun refineRoomEntity(
+        cls: PsiClass
+    ): Pair<List<com.codeintel.mcpserver.models.results.EntityField>, List<String>>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val fields = mutableListOf<com.codeintel.mcpserver.models.results.EntityField>()
+        val primaryKeys = mutableListOf<String>()
+        for (param in ktClass.primaryConstructorParameters) {
+            val typeName = param.typeReference?.text ?: "Any"
+            fields.add(com.codeintel.mcpserver.models.results.EntityField(
+                name = param.name ?: "",
+                type = typeName,
+                nullable = typeName.endsWith("?")
+            ))
+            if (param.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
+                primaryKeys.add(param.name ?: "")
+            }
+        }
+        for (prop in ktClass.getProperties()) {
+            if (prop.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
+                primaryKeys.add(prop.name ?: "")
+            }
+        }
+        return fields to primaryKeys.distinct()
+    }
+
+    override fun refineRoomDaoMethods(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.DaoMethod>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.DaoMethod>()
+        for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
+            val ann = fn.annotationEntries
+            val queryAnn = ann.firstOrNull { it.shortName?.asString() == "Query" }
+            val insertAnn = ann.firstOrNull { it.shortName?.asString() == "Insert" }
+            val updateAnn = ann.firstOrNull { it.shortName?.asString() == "Update" }
+            val deleteAnn = ann.firstOrNull { it.shortName?.asString() == "Delete" }
+            val (sql, annName) = when {
+                queryAnn != null -> {
+                    val sqlText = queryAnn.valueArguments.firstOrNull()
+                        ?.getArgumentExpression()?.text?.removeSurrounding("\"") ?: ""
+                    sqlText to "@Query"
+                }
+                insertAnn != null -> null to "@Insert"
+                updateAnn != null -> null to "@Update"
+                deleteAnn != null -> null to "@Delete"
+                else -> continue
+            }
+            out.add(com.codeintel.mcpserver.models.results.DaoMethod(
+                name = fn.name ?: "",
+                sql = sql,
+                returnType = fn.typeReference?.text ?: "Unit",
+                annotation = annName
+            ))
+        }
+        return out
+    }
+
+    override fun refineHiltProvides(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.HiltProvides>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.HiltProvides>()
+        for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
+            val hasProvides = fn.annotationEntries.any { it.shortName?.asString() == "Provides" }
+            val hasBinds = fn.annotationEntries.any { it.shortName?.asString() == "Binds" }
+            if (!hasProvides && !hasBinds) continue
+            out.add(com.codeintel.mcpserver.models.results.HiltProvides(
+                methodName = fn.name ?: "",
+                returnType = fn.typeReference?.text ?: "Unit",
+                scope = null
+            ))
+        }
+        return out
+    }
+
+    override fun collectRetrofitInterfaces(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.RetrofitInterface>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitInterface>()
+        val httpMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+        for (decl in file.declarations) {
+            if (decl !is KtClass || !decl.isInterface()) continue
+            val fns = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+            val hasRetrofit = fns.any { fn ->
+                fn.annotationEntries.any {
+                    (it.shortName?.asString() ?: "") in listOf("GET", "POST", "PUT", "DELETE", "PATCH")
+                }
+            }
+            if (!hasRetrofit) continue
+
+            val endpoints = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitEndpoint>()
+            for (fn in fns) {
+                for (httpMethod in httpMethods) {
+                    val ann = fn.annotationEntries.firstOrNull {
+                        it.shortName?.asString() == httpMethod
+                    } ?: continue
+                    val path = ann.valueArguments.firstOrNull()
+                        ?.getArgumentExpression()?.text?.removeSurrounding("\"") ?: ""
+                    val params = fn.valueParameters.map { p ->
+                        val paramAnn = p.annotationEntries.firstOrNull()?.shortName?.asString() ?: "Body"
+                        com.codeintel.mcpserver.models.results.EndpointParam(
+                            name = p.name ?: "",
+                            type = p.typeReference?.text ?: "Any",
+                            annotation = "@$paramAnn"
+                        )
+                    }
+                    endpoints.add(com.codeintel.mcpserver.models.results.RetrofitEndpoint(
+                        method = fn.name ?: "",
+                        path = path,
+                        httpMethod = httpMethod,
+                        returnType = fn.typeReference?.text ?: "Unit",
+                        parameters = params
+                    ))
+                }
+            }
+            out.add(com.codeintel.mcpserver.models.results.RetrofitInterface(
+                name = decl.fqName?.asString() ?: decl.name ?: "",
+                baseUrl = null,
+                endpoints = endpoints
+            ))
+        }
+        return out
+    }
+
+    override fun collectComposeInfo(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): com.codeintel.mcpserver.lang.ComposeFileInfo? {
+        if (file !is KtFile) return null
+        val composables = mutableListOf<com.codeintel.mcpserver.models.results.ComposableInfo>()
+        val themes = mutableListOf<com.codeintel.mcpserver.models.results.ThemeInfo>()
+        val stateHolders = mutableListOf<com.codeintel.mcpserver.models.results.StateHolderInfo>()
+        val relPath = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(
+            project, file.virtualFile ?: return null
+        )
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+
+        for (fn in PsiTreeUtil.findChildrenOfType(file, KtNamedFunction::class.java)) {
+            val isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" }
+            if (!isComposable) continue
+            val isPreview = fn.annotationEntries.any { it.shortName?.asString() == "Preview" }
+            val params = fn.valueParameters.map {
+                "${it.name ?: "_"}: ${it.typeReference?.text ?: "Any"}"
+            }
+            val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
+            val name = fn.name ?: "<anonymous>"
+            composables.add(com.codeintel.mcpserver.models.results.ComposableInfo(
+                name = name, file = relPath, line = line,
+                parameters = params, preview = isPreview
+            ))
+            if (name.contains("Theme", ignoreCase = true)) {
+                themes.add(com.codeintel.mcpserver.models.results.ThemeInfo(
+                    name = name, file = relPath, colorScheme = null
+                ))
+            }
+        }
+        for (cls in PsiTreeUtil.findChildrenOfType(file, KtClass::class.java)) {
+            val hasStateProps = cls.getProperties().any { prop ->
+                val typeText = prop.typeReference?.text ?: ""
+                typeText.contains("MutableState") || typeText.contains("StateFlow") ||
+                    typeText.contains("MutableStateFlow")
+            }
+            if (hasStateProps) {
+                stateHolders.add(com.codeintel.mcpserver.models.results.StateHolderInfo(
+                    name = cls.name ?: "",
+                    stateType = "ViewModel/StateHolder",
+                    file = relPath
+                ))
+            }
+        }
+        return com.codeintel.mcpserver.lang.ComposeFileInfo(composables, themes, stateHolders)
+    }
+
+    override fun collectNavComposableRoutes(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.NavDestination>? {
+        if (file !is KtFile) return null
+        val text = file.text
+        if (!(text.contains("NavHost") || text.contains("composable("))) return emptyList()
+        val relPath = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(
+            project, file.virtualFile ?: return emptyList()
+        )
+        val regex = Regex("""composable\s*\(\s*(?:route\s*=\s*)?["']([^"']+)["']""")
+        return regex.findAll(text).map { match ->
+            com.codeintel.mcpserver.models.results.NavDestination(
+                id = match.groupValues[1],
+                className = null,
+                arguments = emptyList(),
+                graphId = relPath
+            )
+        }.toList()
+    }
+
+    override fun runBatchFixInspection(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        inspectionId: String,
+        dryRun: Boolean
+    ): com.codeintel.mcpserver.lang.BatchFixOutcome? {
+        if (file !is KtFile) return null
+        var problemsFound = 0
+        var problemsFixed = 0
+        val failures = mutableListOf<String>()
+        when (inspectionId) {
+            "UnusedImport", "unused-import" -> {
+                for (importDir in file.importDirectives) {
+                    val importedFqn = importDir.importedFqName?.asString() ?: continue
+                    val simpleName = importedFqn.substringAfterLast(".")
+                    val isUsed = file.declarations.any { it.text.contains(simpleName) }
+                    if (!isUsed) {
+                        problemsFound++
+                        if (!dryRun) {
+                            try {
+                                com.intellij.openapi.command.WriteCommandAction
+                                    .runWriteCommandAction(project) { importDir.delete() }
+                                problemsFixed++
+                            } catch (e: Exception) {
+                                failures.add("Failed to remove import: ${e.message}")
+                            }
+                        }
+                    }
+                }
+            }
+            "RedundantVisibilityModifier", "redundant-visibility" -> {
+                for (decl in PsiTreeUtil.findChildrenOfType(
+                    file, org.jetbrains.kotlin.psi.KtDeclaration::class.java
+                )) {
+                    if (decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PUBLIC_KEYWORD) &&
+                        decl.parent is org.jetbrains.kotlin.psi.KtClassBody) {
+                        problemsFound++
+                    }
+                }
+            }
+            "ExplicitThis", "explicit-this" -> {
+                for (expr in PsiTreeUtil.findChildrenOfType(
+                    file, org.jetbrains.kotlin.psi.KtThisExpression::class.java
+                )) {
+                    if (expr.parent is org.jetbrains.kotlin.psi.KtDotQualifiedExpression) {
+                        problemsFound++
+                    }
+                }
+            }
+            else -> return com.codeintel.mcpserver.lang.BatchFixOutcome(supported = false)
+        }
+        return com.codeintel.mcpserver.lang.BatchFixOutcome(
+            supported = true,
+            problemsFound = problemsFound,
+            problemsFixed = problemsFixed,
+            failures = failures
+        )
+    }
 }

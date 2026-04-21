@@ -1,5 +1,7 @@
 package com.codeintel.mcpserver.services
 
+import com.codeintel.mcpserver.lang.ComposeFileInfo
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.FrameworkType
 import com.codeintel.mcpserver.models.args.QueryFrameworkArgs
 import com.codeintel.mcpserver.models.results.ComposableInfo
@@ -35,17 +37,12 @@ import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiClassObjectAccessExpression
-import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.AnnotatedElementsSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtNamedFunction
 
 object FrameworkAnalyzer {
 
@@ -153,25 +150,12 @@ object FrameworkAnalyzer {
             }
         }
 
-        val ktClass = cls.navigationElement
-        if (ktClass is KtClass) {
+        val refined = LanguageAdapter.all(cls.project).firstNotNullOfOrNull { it.refineRoomEntity(cls) }
+        if (refined != null) {
             fields.clear()
             primaryKeys.clear()
-            for (param in ktClass.primaryConstructorParameters) {
-                val typeName = param.typeReference?.text ?: "Any"
-                val isNullable = typeName.endsWith("?")
-                fields.add(EntityField(name = param.name ?: "", type = typeName, nullable = isNullable))
-            }
-            for (prop in ktClass.getProperties()) {
-                if (prop.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
-                    primaryKeys.add(prop.name ?: "")
-                }
-            }
-            for (param in ktClass.primaryConstructorParameters) {
-                if (param.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
-                    primaryKeys.add(param.name ?: "")
-                }
-            }
+            fields.addAll(refined.first)
+            primaryKeys.addAll(refined.second)
         }
 
         val tableName = extractTableName(entityAnnotation, cls.name ?: "")
@@ -224,34 +208,10 @@ object FrameworkAnalyzer {
             ))
         }
 
-        val ktClass = cls.navigationElement
-        if (ktClass is KtClass && methods.isEmpty()) {
-            for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
-                val annotations = fn.annotationEntries
-                val queryAnn = annotations.firstOrNull { it.shortName?.asString() == "Query" }
-                val insertAnn = annotations.firstOrNull { it.shortName?.asString() == "Insert" }
-                val updateAnn = annotations.firstOrNull { it.shortName?.asString() == "Update" }
-                val deleteAnn = annotations.firstOrNull { it.shortName?.asString() == "Delete" }
-
-                val (sql, ann) = when {
-                    queryAnn != null -> {
-                        val args = queryAnn.valueArguments
-                        val sqlText = args.firstOrNull()?.getArgumentExpression()?.text?.removeSurrounding("\"") ?: ""
-                        sqlText to "@Query"
-                    }
-                    insertAnn != null -> null to "@Insert"
-                    updateAnn != null -> null to "@Update"
-                    deleteAnn != null -> null to "@Delete"
-                    else -> continue
-                }
-
-                methods.add(DaoMethod(
-                    name = fn.name ?: "",
-                    sql = sql,
-                    returnType = fn.typeReference?.text ?: "Unit",
-                    annotation = ann
-                ))
-            }
+        if (methods.isEmpty()) {
+            val refined = LanguageAdapter.all(cls.project)
+                .firstNotNullOfOrNull { it.refineRoomDaoMethods(cls) }
+            if (refined != null) methods.addAll(refined)
         }
 
         return RoomDao(name = cls.name ?: "", methods = methods)
@@ -262,74 +222,22 @@ object FrameworkAnalyzer {
     private fun analyzeRetrofit(project: Project, detailTarget: String?): FrameworkViewResult {
         val scope = GlobalSearchScope.projectScope(project)
         val interfaces = mutableListOf<RetrofitInterface>()
+        val adapters = LanguageAdapter.all(project)
 
-        val ktFiles = FilenameIndex.getAllFilesByExt(project, "kt", scope)
-        val javaFiles = FilenameIndex.getAllFilesByExt(project, "java", scope)
-
-        for (vf in javaFiles) {
-            val pf = PsiManager.getInstance(project).findFile(vf) as? PsiJavaFile ?: continue
-            for (cls in pf.classes) {
-                if (!cls.isInterface) continue
-                val hasRetrofitMethods = cls.methods.any { m ->
-                    m.getAnnotation("retrofit2.http.GET") != null ||
-                    m.getAnnotation("retrofit2.http.POST") != null ||
-                    m.getAnnotation("retrofit2.http.PUT") != null ||
-                    m.getAnnotation("retrofit2.http.DELETE") != null ||
-                    m.getAnnotation("retrofit2.http.PATCH") != null
-                }
-                if (!hasRetrofitMethods) continue
-                interfaces.add(extractRetrofitInterface(cls))
-            }
-        }
-
-        for (vf in ktFiles) {
-            val pf = PsiManager.getInstance(project).findFile(vf) as? KtFile ?: continue
-            for (decl in pf.declarations) {
-                if (decl !is KtClass || !decl.isInterface()) continue
-                val hasRetrofitAnnotations = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java).any { fn ->
-                    fn.annotationEntries.any { ann ->
-                        val name = ann.shortName?.asString() ?: ""
-                        name in listOf("GET", "POST", "PUT", "DELETE", "PATCH")
-                    }
-                }
-                if (!hasRetrofitAnnotations) continue
-                interfaces.add(extractKotlinRetrofitInterface(project, decl))
-            }
+        val exts = adapters.flatMap { it.fileExtensions() }.toSet().ifEmpty { setOf("kt", "java") }
+        val files = exts.flatMap { FilenameIndex.getAllFilesByExt(project, it, scope) }
+        for (vf in files) {
+            val pf = PsiManager.getInstance(project).findFile(vf) ?: continue
+            val adapter = adapters.firstOrNull {
+                runCatching { it.canHandle(pf) }.getOrDefault(false)
+            } ?: continue
+            adapter.collectRetrofitInterfaces(project, pf)?.let { interfaces.addAll(it) }
         }
 
         return FrameworkViewResult(
             framework = "retrofit",
             summary = FrameworkSummary(totalComponents = interfaces.size, detailTarget = detailTarget),
             retrofit = RetrofitView(interfaces = interfaces)
-        )
-    }
-
-    private fun extractRetrofitInterface(cls: PsiClass): RetrofitInterface {
-        val endpoints = mutableListOf<RetrofitEndpoint>()
-        val httpMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
-
-        for (method in cls.methods) {
-            for (httpMethod in httpMethods) {
-                val ann = method.getAnnotation("retrofit2.http.$httpMethod") ?: continue
-                val path = ann.findAttributeValue("value")?.text?.removeSurrounding("\"") ?: ""
-                val params = method.parameterList.parameters.map { p ->
-                    val paramAnn = p.annotations.firstOrNull()?.qualifiedName?.substringAfterLast(".") ?: "Body"
-                    EndpointParam(name = p.name ?: "", type = p.type.canonicalText, annotation = "@$paramAnn")
-                }
-                endpoints.add(RetrofitEndpoint(
-                    method = method.name,
-                    path = path,
-                    httpMethod = httpMethod,
-                    returnType = method.returnType?.canonicalText ?: "Unit",
-                    parameters = params
-                ))
-            }
-        }
-
-        return RetrofitInterface(
-            name = cls.qualifiedName ?: cls.name ?: "",
-            baseUrl = null,
-            endpoints = endpoints
         )
     }
 
@@ -389,19 +297,10 @@ object FrameworkAnalyzer {
             }
         }
 
-        val ktClass = cls.navigationElement
-        if (ktClass is KtClass && provides.isEmpty()) {
-            for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
-                val hasProvides = fn.annotationEntries.any { it.shortName?.asString() == "Provides" }
-                val hasBinds = fn.annotationEntries.any { it.shortName?.asString() == "Binds" }
-                if (hasProvides || hasBinds) {
-                    provides.add(HiltProvides(
-                        methodName = fn.name ?: "",
-                        returnType = fn.typeReference?.text ?: "Unit",
-                        scope = null
-                    ))
-                }
-            }
+        if (provides.isEmpty()) {
+            val refined = LanguageAdapter.all(cls.project)
+                .firstNotNullOfOrNull { it.refineHiltProvides(cls) }
+            if (refined != null) provides.addAll(refined)
         }
 
         return HiltModule(
@@ -434,61 +333,19 @@ object FrameworkAnalyzer {
         val composables = mutableListOf<ComposableInfo>()
         val themes = mutableListOf<ThemeInfo>()
         val stateHolders = mutableListOf<StateHolderInfo>()
+        val adapters = LanguageAdapter.all(project)
+        val exts = adapters.flatMap { it.fileExtensions() }.toSet().ifEmpty { setOf("kt", "java") }
+        val files = exts.flatMap { FilenameIndex.getAllFilesByExt(project, it, scope) }
 
-        val ktFiles = FilenameIndex.getAllFilesByExt(project, "kt", scope)
-        for (vf in ktFiles) {
-            val pf = PsiManager.getInstance(project).findFile(vf) as? KtFile ?: continue
-            val relPath = ProjectUtils.toRelativePath(project, vf)
-
-            for (fn in PsiTreeUtil.findChildrenOfType(pf, KtNamedFunction::class.java)) {
-                val isComposable = fn.annotationEntries.any { ann ->
-                    ann.shortName?.asString() == "Composable"
-                }
-                if (!isComposable) continue
-
-                val isPreview = fn.annotationEntries.any { ann ->
-                    ann.shortName?.asString() == "Preview"
-                }
-
-                val params = fn.valueParameters.map { p ->
-                    "${p.name ?: "_"}: ${p.typeReference?.text ?: "Any"}"
-                }
-
-                val doc = PsiDocumentManager.getInstance(project).getDocument(pf)
-                val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
-                val name = fn.name ?: "<anonymous>"
-
-                composables.add(ComposableInfo(
-                    name = name,
-                    file = relPath,
-                    line = line,
-                    parameters = params,
-                    preview = isPreview
-                ))
-
-                if (name.contains("Theme", ignoreCase = true)) {
-                    themes.add(ThemeInfo(
-                        name = name,
-                        file = relPath,
-                        colorScheme = null
-                    ))
-                }
-            }
-
-            for (cls in PsiTreeUtil.findChildrenOfType(pf, KtClass::class.java)) {
-                val hasStateProps = cls.getProperties().any { prop ->
-                    val typeText = prop.typeReference?.text ?: ""
-                    typeText.contains("MutableState") || typeText.contains("StateFlow") ||
-                    typeText.contains("MutableStateFlow")
-                }
-                if (hasStateProps) {
-                    stateHolders.add(StateHolderInfo(
-                        name = cls.name ?: "",
-                        stateType = "ViewModel/StateHolder",
-                        file = relPath
-                    ))
-                }
-            }
+        for (vf in files) {
+            val pf = PsiManager.getInstance(project).findFile(vf) ?: continue
+            val adapter = adapters.firstOrNull {
+                runCatching { it.canHandle(pf) }.getOrDefault(false)
+            } ?: continue
+            val info = adapter.collectComposeInfo(project, pf) ?: continue
+            composables.addAll(info.composables)
+            themes.addAll(info.themes)
+            stateHolders.addAll(info.stateHolders)
         }
 
         return FrameworkViewResult(
@@ -546,22 +403,17 @@ object FrameworkAnalyzer {
             }
         }
 
-        val ktFiles = FilenameIndex.getAllFilesByExt(project, "kt", scope)
-        for (vf in ktFiles) {
-            val pf = PsiManager.getInstance(project).findFile(vf) as? KtFile ?: continue
-            val hasNavHost = pf.text.contains("NavHost") || pf.text.contains("composable(")
-            if (!hasNavHost) continue
-            val relPath = ProjectUtils.toRelativePath(project, vf)
-
-            val composableRegex = Regex("""composable\s*\(\s*(?:route\s*=\s*)?["']([^"']+)["']""")
-            composableRegex.findAll(pf.text).forEach { match ->
-                val route = match.groupValues[1]
-                if (destinations.none { it.id == route }) {
-                    destinations.add(NavDestination(
-                        id = route, className = null,
-                        arguments = emptyList(), graphId = relPath
-                    ))
-                }
+        val adapters = LanguageAdapter.all(project)
+        val exts = adapters.flatMap { it.fileExtensions() }.toSet().ifEmpty { setOf("kt", "java") }
+        val sourceFiles = exts.flatMap { FilenameIndex.getAllFilesByExt(project, it, scope) }
+        for (vf in sourceFiles) {
+            val pf = PsiManager.getInstance(project).findFile(vf) ?: continue
+            val adapter = adapters.firstOrNull {
+                runCatching { it.canHandle(pf) }.getOrDefault(false)
+            } ?: continue
+            val routes = adapter.collectNavComposableRoutes(project, pf) ?: continue
+            for (route in routes) {
+                if (destinations.none { it.id == route.id }) destinations.add(route)
             }
         }
 
@@ -586,39 +438,5 @@ object FrameworkAnalyzer {
         val annotationClass = facade.findClass(annotationFqn, GlobalSearchScope.allScope(project))
             ?: return emptyList()
         return AnnotatedElementsSearch.searchPsiClasses(annotationClass, scope).findAll().toList()
-    }
-
-    private fun extractKotlinRetrofitInterface(project: Project, ktClass: KtClass): RetrofitInterface {
-        val endpoints = mutableListOf<RetrofitEndpoint>()
-        val httpMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
-
-        for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
-            for (httpMethod in httpMethods) {
-                val ann = fn.annotationEntries.firstOrNull { it.shortName?.asString() == httpMethod } ?: continue
-                val path = ann.valueArguments.firstOrNull()?.getArgumentExpression()?.text
-                    ?.removeSurrounding("\"") ?: ""
-                val params = fn.valueParameters.map { p ->
-                    val paramAnn = p.annotationEntries.firstOrNull()?.shortName?.asString() ?: "Body"
-                    EndpointParam(
-                        name = p.name ?: "",
-                        type = p.typeReference?.text ?: "Any",
-                        annotation = "@$paramAnn"
-                    )
-                }
-                endpoints.add(RetrofitEndpoint(
-                    method = fn.name ?: "",
-                    path = path,
-                    httpMethod = httpMethod,
-                    returnType = fn.typeReference?.text ?: "Unit",
-                    parameters = params
-                ))
-            }
-        }
-
-        return RetrofitInterface(
-            name = ktClass.fqName?.asString() ?: ktClass.name ?: "",
-            baseUrl = null,
-            endpoints = endpoints
-        )
     }
 }

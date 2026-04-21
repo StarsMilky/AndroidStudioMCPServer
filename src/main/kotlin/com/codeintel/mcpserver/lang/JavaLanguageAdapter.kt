@@ -605,6 +605,55 @@ class JavaLanguageAdapter : LanguageAdapter {
     override fun getEnclosingClassLike(element: PsiElement): PsiElement? =
         PsiTreeUtil.getParentOfType(element, PsiClass::class.java)
 
+    override fun collectRetrofitInterfaces(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.RetrofitInterface>? {
+        if (file !is PsiJavaFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitInterface>()
+        val httpMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+        for (cls in file.classes) {
+            if (!cls.isInterface) continue
+            val has = cls.methods.any { m ->
+                m.getAnnotation("retrofit2.http.GET") != null ||
+                m.getAnnotation("retrofit2.http.POST") != null ||
+                m.getAnnotation("retrofit2.http.PUT") != null ||
+                m.getAnnotation("retrofit2.http.DELETE") != null ||
+                m.getAnnotation("retrofit2.http.PATCH") != null
+            }
+            if (!has) continue
+            val endpoints = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitEndpoint>()
+            for (method in cls.methods) {
+                for (httpMethod in httpMethods) {
+                    val ann = method.getAnnotation("retrofit2.http.$httpMethod") ?: continue
+                    val path = ann.findAttributeValue("value")?.text?.removeSurrounding("\"") ?: ""
+                    val params = method.parameterList.parameters.map { p ->
+                        val paramAnn = p.annotations.firstOrNull()
+                            ?.qualifiedName?.substringAfterLast(".") ?: "Body"
+                        com.codeintel.mcpserver.models.results.EndpointParam(
+                            name = p.name ?: "",
+                            type = p.type.canonicalText,
+                            annotation = "@$paramAnn"
+                        )
+                    }
+                    endpoints.add(com.codeintel.mcpserver.models.results.RetrofitEndpoint(
+                        method = method.name,
+                        path = path,
+                        httpMethod = httpMethod,
+                        returnType = method.returnType?.canonicalText ?: "Unit",
+                        parameters = params
+                    ))
+                }
+            }
+            out.add(com.codeintel.mcpserver.models.results.RetrofitInterface(
+                name = cls.qualifiedName ?: cls.name ?: "",
+                baseUrl = null,
+                endpoints = endpoints
+            ))
+        }
+        return out
+    }
+
     private fun buildJavaClassEntry(
         cls: PsiClass,
         includeMembers: Boolean

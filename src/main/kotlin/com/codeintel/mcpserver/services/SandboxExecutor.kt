@@ -7,19 +7,15 @@ import com.codeintel.mcpserver.models.args.SandboxOperation
 import com.codeintel.mcpserver.models.results.SandboxResult
 import com.codeintel.mcpserver.util.ProjectUtils
 import com.codeintel.mcpserver.util.PsiUtils
-import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
 import com.intellij.psi.JavaPsiFacade
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiDocumentManager
-import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiModifier
 import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
-import com.intellij.psi.util.PsiTreeUtil
 
 object SandboxExecutor {
     fun execute(project: Project, args: SandboxArgs): SandboxResult {
@@ -234,99 +230,57 @@ object SandboxExecutor {
         } else null
 
         val inspectionIds = args.inspectionIds ?: listOf("UnusedImport")
+        val adapters = com.codeintel.mcpserver.lang.LanguageAdapter.all(project)
+        val extensions = adapters.flatMap { it.fileExtensions() }.toSet()
+            .ifEmpty { setOf("kt", "java") }
 
         return PsiUtils.smartReadAction(project) {
             val scope = GlobalSearchScope.projectScope(project)
-            val ktFiles = com.intellij.psi.search.FilenameIndex
-                .getAllFilesByExt(project, "kt", scope)
-            val javaFiles = com.intellij.psi.search.FilenameIndex
-                .getAllFilesByExt(project, "java", scope)
+            val allFiles = extensions.flatMap { ext ->
+                com.intellij.psi.search.FilenameIndex.getAllFilesByExt(project, ext, scope)
+            }
 
             var problemsFound = 0
             var problemsFixed = 0
             val unfixable = mutableListOf<
                 com.codeintel.mcpserver.models.results.UnfixableItem
             >()
+            val unsupportedReported = mutableSetOf<String>()
 
-            for (vf in ktFiles + javaFiles) {
+            for (vf in allFiles) {
                 val pf = PsiManager.getInstance(project).findFile(vf) ?: continue
                 val relPath = ProjectUtils.toRelativePath(project, vf)
 
                 for (inspectionId in inspectionIds) {
-                    when (inspectionId) {
-                        "UnusedImport", "unused-import" -> {
-                            if (pf is org.jetbrains.kotlin.psi.KtFile) {
-                                for (importDir in pf.importDirectives) {
-                                    val importedFqn = importDir.importedFqName?.asString()
-                                        ?: continue
-                                    val simpleName = importedFqn.substringAfterLast(".")
-                                    val isUsed = pf.declarations.any { decl ->
-                                        decl.text.contains(simpleName)
-                                    }
-                                    if (!isUsed) {
-                                        problemsFound++
-                                        if (!args.dryRun) {
-                                            try {
-                                                WriteCommandAction.runWriteCommandAction(
-                                                    project
-                                                ) { importDir.delete() }
-                                                problemsFixed++
-                                            } catch (e: Exception) {
-                                                unfixable.add(
-                                                    com.codeintel.mcpserver.models
-                                                        .results.UnfixableItem(
-                                                        file = relPath,
-                                                        line = 0,
-                                                        reason = "Failed to remove import: " +
-                                                            "${e.message}"
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        "RedundantVisibilityModifier", "redundant-visibility" -> {
-                            if (pf is org.jetbrains.kotlin.psi.KtFile) {
-                                for (decl in PsiTreeUtil.findChildrenOfType(
-                                    pf,
-                                    org.jetbrains.kotlin.psi.KtDeclaration::class.java
-                                )) {
-                                    if (decl.hasModifier(
-                                        org.jetbrains.kotlin.lexer.KtTokens.PUBLIC_KEYWORD
-                                    ) && decl.parent is org.jetbrains.kotlin.psi.KtClassBody) {
-                                        problemsFound++
-                                    }
-                                }
-                            }
-                        }
-                        "ExplicitThis", "explicit-this" -> {
-                            if (pf is org.jetbrains.kotlin.psi.KtFile) {
-                                for (expr in PsiTreeUtil.findChildrenOfType(
-                                    pf,
-                                    org.jetbrains.kotlin.psi.KtThisExpression::class.java
-                                )) {
-                                    val parent = expr.parent
-                                    val isDotQualified =
-                                        parent is org.jetbrains.kotlin.psi.KtDotQualifiedExpression
-                                    if (isDotQualified) {
-                                        problemsFound++
-                                    }
-                                }
-                            }
-                        }
-                        else -> {
+                    var handled = false
+                    var anySupported = false
+                    for (adapter in adapters) {
+                        val outcome = adapter.runBatchFixInspection(
+                            project, pf, inspectionId, args.dryRun
+                        ) ?: continue
+                        handled = true
+                        if (!outcome.supported) continue
+                        anySupported = true
+                        problemsFound += outcome.problemsFound
+                        problemsFixed += outcome.problemsFixed
+                        for (reason in outcome.failures) {
                             unfixable.add(
                                 com.codeintel.mcpserver.models.results.UnfixableItem(
-                                    file = relPath,
-                                    line = 0,
-                                    reason = "Inspection '$inspectionId' is not supported " +
-                                        "for batch fix"
+                                    file = relPath, line = 0, reason = reason
                                 )
                             )
-                            break
                         }
+                        break
+                    }
+                    if (handled && !anySupported && unsupportedReported.add(inspectionId)) {
+                        unfixable.add(
+                            com.codeintel.mcpserver.models.results.UnfixableItem(
+                                file = relPath,
+                                line = 0,
+                                reason = "Inspection '$inspectionId' is not supported " +
+                                    "for batch fix"
+                            )
+                        )
                     }
                 }
             }

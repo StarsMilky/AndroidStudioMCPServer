@@ -340,6 +340,67 @@ interface LanguageAdapter {
      */
     fun getEnclosingClassLike(element: PsiElement): PsiElement? = null
 
+    // -------- Framework refinement hooks (Room / Retrofit / Hilt / Compose / Navigation) --------
+
+    /**
+     * Refine Room entity fields+primaryKeys from this adapter's view of [cls].
+     * Returns null if this adapter doesn't own `cls.navigationElement`.
+     * Typically used by Kotlin adapter to re-read data-class constructor params.
+     */
+    fun refineRoomEntity(
+        cls: PsiClass
+    ): Pair<List<com.codeintel.mcpserver.models.results.EntityField>, List<String>>? = null
+
+    /**
+     * Refine Room DAO methods when the base PSI yields none (Kotlin interface DAOs).
+     */
+    fun refineRoomDaoMethods(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.DaoMethod>? = null
+
+    /**
+     * Refine Hilt @Provides/@Binds when the base PSI yields none (Kotlin modules).
+     */
+    fun refineHiltProvides(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.HiltProvides>? = null
+
+    /**
+     * Collect Retrofit service interfaces declared in [file]. Default: null.
+     */
+    fun collectRetrofitInterfaces(
+        project: Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.RetrofitInterface>? = null
+
+    /**
+     * Collect Compose composables / themes / state-holders from [file]. Default: null.
+     */
+    fun collectComposeInfo(
+        project: Project,
+        file: PsiFile
+    ): com.codeintel.mcpserver.lang.ComposeFileInfo? = null
+
+    /**
+     * Collect Compose `composable(route=...)` destinations from [file]. Default: null.
+     */
+    fun collectNavComposableRoutes(
+        project: Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.NavDestination>? = null
+
+    /**
+     * Apply a batch-fix inspection on [file]. Returns null if this adapter doesn't
+     * own the file or doesn't know about [inspectionId]. The "UNSUPPORTED" result
+     * means "knows about the file but not the inspection".
+     */
+    fun runBatchFixInspection(
+        project: Project,
+        file: PsiFile,
+        inspectionId: String,
+        dryRun: Boolean
+    ): BatchFixOutcome? = null
+
 
     companion object {
         val EP_NAME: ExtensionPointName<LanguageAdapter> =
@@ -377,4 +438,22 @@ data class CloneCandidate(
     val paramCount: Int,
     val lineCount: Int,
     val bodyHash: Int
+)
+
+data class ComposeFileInfo(
+    val composables: List<com.codeintel.mcpserver.models.results.ComposableInfo>,
+    val themes: List<com.codeintel.mcpserver.models.results.ThemeInfo>,
+    val stateHolders: List<com.codeintel.mcpserver.models.results.StateHolderInfo>
+)
+
+/**
+ * Result of a batch-fix inspection run for one file. [supported] is false when
+ * the adapter doesn't implement the given inspectionId (service will record
+ * "unsupported inspection" once per run).
+ */
+data class BatchFixOutcome(
+    val supported: Boolean,
+    val problemsFound: Int = 0,
+    val problemsFixed: Int = 0,
+    val failures: List<String> = emptyList()
 )
