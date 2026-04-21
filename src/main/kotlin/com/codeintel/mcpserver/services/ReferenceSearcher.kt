@@ -2,6 +2,7 @@ package com.codeintel.mcpserver.services
 
 import com.codeintel.mcpserver.errors.McpErrorCode
 import com.codeintel.mcpserver.errors.ToolException
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.FindReferencesArgs
 import com.codeintel.mcpserver.models.args.FindReferencesMode
 import com.codeintel.mcpserver.models.results.CallNode
@@ -13,32 +14,38 @@ import com.codeintel.mcpserver.models.results.UsageType
 import com.codeintel.mcpserver.util.ProjectUtils
 import com.codeintel.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiMethod
-import com.intellij.psi.PsiMethodCallExpression
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.PsiReference
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.searches.ClassInheritorsSearch
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.asJava.toLightClass
-import org.jetbrains.kotlin.psi.KtBinaryExpression
-import org.jetbrains.kotlin.psi.KtCallExpression
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtNamedFunction
 
 object ReferenceSearcher {
 
     fun search(project: Project, args: FindReferencesArgs): ReferenceResult {
-        return if (args.qualifiedName != null) {
+        val result = if (args.qualifiedName != null) {
             searchByQualifiedName(project, args)
         } else {
             searchByPosition(project, args)
         }
+        val hint = when (args.mode) {
+            com.codeintel.mcpserver.models.args.FindReferencesMode.USAGES ->
+                "💡 Next: for any interesting usage, call resolve_symbol(file, line, column) to inspect its type."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALLERS,
+            @Suppress("DEPRECATION")
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALL_HIERARCHY ->
+                "💡 Next: use analyze_data_flow(mode='BACKWARD') at a caller to trace where values originate."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALLEES ->
+                "💡 Next: pick an interesting callee and resolve_symbol to inspect its declaration."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.TYPE_HIERARCHY ->
+                "💡 Next: for any subtype, use find_references(mode='USAGES') to see where that subtype is instantiated."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun searchByPosition(project: Project, args: FindReferencesArgs): ReferenceResult {
@@ -111,7 +118,8 @@ object ReferenceSearcher {
     ): ReferenceResult {
         return when (args.mode) {
             FindReferencesMode.USAGES -> searchUsages(project, target, args)
-            FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY ->
+            FindReferencesMode.CALLERS,
+            @Suppress("DEPRECATION") FindReferencesMode.CALL_HIERARCHY ->
                 searchCallHierarchy(project, target, args)
             FindReferencesMode.CALLEES -> searchCallees(project, target, args)
             FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
@@ -154,17 +162,10 @@ object ReferenceSearcher {
     }
 
     private fun classifyUsageType(element: PsiElement): UsageType {
-        val parent = element.parent
-        return when {
-            parent is PsiMethodCallExpression -> UsageType.CALL
-            parent is KtCallExpression -> UsageType.CALL
-            parent is PsiMethod && PsiTreeUtil.isAncestor(parent, element, true) ->
-                UsageType.OVERRIDE
-            parent is PsiAssignmentExpression && parent.lExpression == element -> UsageType.WRITE
-            parent is KtBinaryExpression && parent.left == element &&
-                parent.operationReference.text == "=" -> UsageType.WRITE
-            else -> UsageType.READ
-        }
+        LanguageAdapter.all(element.project)
+            .firstNotNullOfOrNull { it.classifyUsage(element) }
+            ?.let { return it }
+        return UsageType.READ
     }
 
     private fun searchCallHierarchy(
@@ -212,11 +213,9 @@ object ReferenceSearcher {
         method: PsiElement,
         children: List<CallNode>
     ): CallNode {
-        val name = when (method) {
-            is PsiMethod -> "${method.containingClass?.qualifiedName ?: ""}.${method.name}"
-            is KtNamedFunction -> method.fqName?.asString() ?: method.name ?: "<anonymous>"
-            else -> method.text.take(30)
-        }
+        val name = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.qualifiedSignature(method) }
+            ?: method.text.take(30)
         val file = method.containingFile?.virtualFile
         val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
             else "<unknown>"
@@ -235,8 +234,7 @@ object ReferenceSearcher {
         target: PsiElement,
         args: FindReferencesArgs
     ): ReferenceResult {
-        val method = PsiTreeUtil.getParentOfType(target, PsiMethod::class.java, false)
-            ?: PsiTreeUtil.getParentOfType(target, KtNamedFunction::class.java, false)
+        val method = findEnclosingMethod(target)
             ?: throw ToolException(
                 McpErrorCode.SYMBOL_NOT_FOUND,
                 mapOf("reason" to "Target is not a method")
@@ -245,11 +243,8 @@ object ReferenceSearcher {
         val callees = mutableListOf<UsageInfo>()
         val visited = mutableSetOf<String>()
 
-        val body: PsiElement? = when (method) {
-            is PsiMethod -> method.body
-            is KtNamedFunction -> method.bodyBlockExpression ?: method.bodyExpression
-            else -> null
-        }
+        val body: PsiElement? = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.getMethodBody(method) }
 
         if (body != null) {
             collectCallees(project, body, callees, visited, args.limit)
@@ -267,57 +262,36 @@ object ReferenceSearcher {
     ) {
         if (callees.size >= limit) return
 
-        when (element) {
-            is PsiMethodCallExpression -> {
-                val resolved = element.resolveMethod()
-                if (resolved != null) {
-                    val key = "${resolved.containingClass?.qualifiedName}.${resolved.name}"
-                    if (visited.add(key)) {
-                        val file = resolved.containingFile?.virtualFile
-                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
-                            else "<unknown>"
-                        val doc = resolved.containingFile?.let {
-                            PsiDocumentManager.getInstance(project).getDocument(it)
-                        }
-                        val line = doc?.getLineNumber(resolved.textOffset)?.plus(1) ?: 0
-                        val paramTypes = resolved.parameterList.parameters
-                            .joinToString(", ") { it.type.presentableText }
-                        val code = "${resolved.containingClass?.name ?: ""}." +
-                            "${resolved.name}($paramTypes)"
-                        callees.add(UsageInfo(
-                            file = filePath,
-                            line = line,
-                            code = code,
-                            usageType = UsageType.CALL
-                        ))
-                    }
+        // Let any adapter resolve the element as a call site.
+        val resolved = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.resolveCallTarget(element) }
+        if (resolved != null) {
+            val key = LanguageAdapter.all(project)
+                .firstNotNullOfOrNull { it.qualifiedSignature(resolved) }
+                ?: (resolved as? PsiNamedElement)?.name
+                ?: resolved.text?.take(50)
+                ?: ""
+            if (key.isNotEmpty() && visited.add(key)) {
+                val file = resolved.containingFile?.virtualFile
+                val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
+                    else "<unknown>"
+                val doc = resolved.containingFile?.let {
+                    PsiDocumentManager.getInstance(project).getDocument(it)
                 }
-            }
-            is KtCallExpression -> {
-                val ref = element.calleeExpression?.references
-                    ?.firstNotNullOfOrNull { it.resolve() }
-                    ?: element.references.firstNotNullOfOrNull { it.resolve() }
-                if (ref is PsiNamedElement) {
-                    val key = when (ref) {
-                        is PsiMethod -> "${ref.containingClass?.qualifiedName}.${ref.name}"
-                        is KtNamedFunction -> ref.fqName?.asString() ?: ref.name ?: ""
-                        else -> ref.text?.take(50) ?: ""
-                    }
-                    if (key.isNotEmpty() && visited.add(key)) {
-                        val file = ref.containingFile?.virtualFile
-                        val filePath = if (file != null) ProjectUtils.toRelativePath(project, file)
-                            else "<unknown>"
-                        val doc = ref.containingFile?.let {
-                            PsiDocumentManager.getInstance(project).getDocument(it)
-                        }
-                        val line = doc?.getLineNumber(ref.textOffset)?.plus(1) ?: 0
-                        callees.add(UsageInfo(
-                            file = filePath, line = line,
-                            code = key.substringAfterLast(".").ifEmpty { key },
-                            usageType = UsageType.CALL
-                        ))
-                    }
+                val line = doc?.getLineNumber(resolved.textOffset)?.plus(1) ?: 0
+                val code = if (resolved is PsiMethod) {
+                    val paramTypes = resolved.parameterList.parameters
+                        .joinToString(", ") { it.type.presentableText }
+                    "${resolved.containingClass?.name ?: ""}.${resolved.name}($paramTypes)"
+                } else {
+                    key.substringAfterLast(".").ifEmpty { key }
                 }
+                callees.add(UsageInfo(
+                    file = filePath,
+                    line = line,
+                    code = code,
+                    usageType = UsageType.CALL
+                ))
             }
         }
 
@@ -332,14 +306,13 @@ object ReferenceSearcher {
         target: PsiElement,
         args: FindReferencesArgs
     ): ReferenceResult {
-        val psiClass = when (target) {
-            is PsiClass -> target
-            is KtClass -> target.toLightClass()
-            else -> PsiTreeUtil.getParentOfType(target, PsiClass::class.java)
-        } ?: throw ToolException(
-            McpErrorCode.SYMBOL_NOT_FOUND,
-            mapOf("reason" to "Target is not a class")
-        )
+        val psiClass = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.asPsiClass(target) }
+            ?: PsiTreeUtil.getParentOfType(target, PsiClass::class.java)
+            ?: throw ToolException(
+                McpErrorCode.SYMBOL_NOT_FOUND,
+                mapOf("reason" to "Target is not a class")
+            )
 
         val supers = psiClass.supers.mapNotNull { it.qualifiedName }
         val scope = GlobalSearchScope.projectScope(project)
@@ -364,9 +337,9 @@ object ReferenceSearcher {
     }
 
     private fun findEnclosingMethod(element: PsiElement): PsiElement? {
-        if (element is PsiMethod || element is KtNamedFunction) return element
-        return PsiTreeUtil.getParentOfType(element, PsiMethod::class.java)
-            ?: PsiTreeUtil.getParentOfType(element, KtNamedFunction::class.java)
+        val adapters = LanguageAdapter.all(element.project)
+        if (adapters.any { it.isMethodLike(element) }) return element
+        return adapters.firstNotNullOfOrNull { it.findEnclosingMethod(element) }
     }
 
     private fun resolveScope(project: Project, scope: String): GlobalSearchScope = when (scope) {

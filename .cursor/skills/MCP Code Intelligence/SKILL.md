@@ -14,14 +14,16 @@ always-apply: false
 
 # MCP Code Intelligence
 
-12 IDE-level tools for AI agents. **Always prefer these over CLI equivalents.**
+13 IDE-level tools for AI agents. **Always prefer these over CLI equivalents.**
+
+Every tool response includes a `nextAction` hint suggesting the best follow-up call — use it to chain tools.
 
 ## Quick Reference
 
 | Task | Tool Call |
 |------|-----------|
-| Find a symbol by name | `resolve_symbol(name="UserRepository", kind="CLASS")` |
-| Find a symbol by FQN | `resolve_symbol(name="com.example.UserRepository")` |
+| Find a symbol by name | `find_symbol(name="UserRepository", kind="CLASS")` |
+| Find a symbol by FQN | `find_symbol(name="com.example.UserRepository")` |
 | What type is this? | `resolve_symbol(file, line, column)` |
 | Who uses this symbol? (by name) | `find_references(qualified_name="com.example.Foo", mode="USAGES")` |
 | Who uses this symbol? (by pos) | `find_references(file, line, col, mode="USAGES")` |
@@ -44,14 +46,14 @@ always-apply: false
 ## Critical Rules
 
 1. **NEVER** use `grep`/`rg` for code references → `find_references(mode="USAGES")`
-2. **NEVER** use `grep`/`rg` to locate a symbol → `resolve_symbol(name="SymbolName")`
-3. **NEVER** guess types → `resolve_symbol`
+2. **NEVER** use `grep`/`rg` to locate a symbol → `find_symbol(name="SymbolName")`
+3. **NEVER** guess types → `resolve_symbol(file, line, column)`
 4. **NEVER** use `sed`/text-replace for renaming → `refactor(operation="RENAME")`
 5. **NEVER** start multi-file changes without → `checkpoint(operation="CREATE")`
 6. **ALWAYS** start with `query_project(mode="OVERVIEW")` on a new project
-7. **ALWAYS** use `resolve_symbol(name=...)` to find symbol locations instead of grep
+7. **ALWAYS** use `find_symbol(name=...)` to locate symbols instead of grep
 8. All enum values are **UPPERCASE**: `"USAGES"`, `"RENAME"`, `"OVERVIEW"`, not `"usages"`
-9. `resolve_symbol` and `find_references` accept **two entry modes**: `file+line+column` (position) OR `name`/`qualified_name` (name-based). Use whichever is more convenient.
+9. `find_references` accepts **two entry modes**: `file+line+column` (position) OR `qualified_name` (name-based). `resolve_symbol` is position-only — use `find_symbol` for name-based lookup.
 
 ## Workflows
 
@@ -151,24 +153,32 @@ always-apply: false
    → Find all ViewModels to understand app screens
 
 6. For any symbol you encounter (NO grep needed):
-   resolve_symbol(name="SymbolName") → find_references(file, line, col, mode="USAGES")
+   find_symbol(name="SymbolName") → find_references(file, line, col, mode="USAGES")
    OR directly: find_references(qualified_name="com.example.SymbolName", mode="CALLERS")
 ```
 
 ## Tool Details
 
 ### resolve_symbol
-**Two entry modes:**
-- **By position:** `resolve_symbol(file, line, column)` — resolve symbol at exact code position
-- **By name:** `resolve_symbol(name="UserRepository")` — find symbol by simple name or FQN
+**Position-only:** `resolve_symbol(file, line, column)` — resolve the symbol at an exact code position.
 
-Name-based lookup supports:
-- Simple name: `name="UserRepository"` (uses `PsiShortNamesCache` index)
-- Fully-qualified name: `name="com.example.data.UserRepository"` (uses `JavaPsiFacade`)
-- Member lookup: `name="com.example.UserRepository.findById"`
+Use this when you already know a position (from previous tool output, IDE cursor, etc.) and want its qualified type, declaration location, and kind.
+
+For name-based lookup (e.g. "find the class UserRepository"), use **`find_symbol`** instead.
+
+Returns: `qualifiedType`, `declarationFile`, `declarationLine`, `declarationColumn`, `kind` (CLASS/METHOD/FIELD/VARIABLE/PARAMETER/PROPERTY/PACKAGE/OBJECT/ENUM_ENTRY), `nextAction`
+
+### find_symbol
+**Name-based symbol lookup — the replacement for `grep "class Foo"`.**
+
+- Simple name: `find_symbol(name="UserRepository")` (uses `PsiShortNamesCache` index)
+- Fully-qualified name: `find_symbol(name="com.example.data.UserRepository")` (uses `JavaPsiFacade`)
+- Member lookup: `find_symbol(name="com.example.UserRepository.findById")`
 - Kind filter: `kind="CLASS"` / `"METHOD"` / `"FIELD"` / `"ALL"`
+- Scope: `scope="project"` (default) or `scope="module:app"`
+- Limit: `limit=10` (default)
 
-Returns: `qualifiedType`, `declarationFile`, `declarationLine`, `declarationColumn`, `kind` (CLASS/METHOD/FIELD/VARIABLE/PARAMETER/PROPERTY/PACKAGE/OBJECT/ENUM_ENTRY), `totalMatches` (when multiple matches found)
+Returns a list of matches, each with `declarationFile`, `declarationLine`, `declarationColumn`, `qualifiedType`, `kind`. Chain to `find_references(file, line, col, mode="USAGES")` or `resolve_symbol(file, line, col)` for next-step analysis.
 
 ### find_references
 **Two entry modes:**
@@ -239,7 +249,10 @@ Modes: `COMPLEXITY` (cyclomatic), `DEAD_CODE`, `CLONES`, `PATTERNS`, `ERROR_HAND
 ## Tool Chaining Patterns
 
 ```
-resolve_symbol(name="UserDao") → find_references(file, line, col, mode="CALLERS")
+resolve_symbol(file, line, col) → find_references(file, line, col, mode="CALLERS")
+  "Resolve the symbol at this position, then show me all callers. No grep needed."
+
+find_symbol(name="UserDao") → find_references(file, line, col, mode="CALLERS")
   "Find UserDao by name, then show me all callers. No grep needed."
 
 find_references(qualified_name="com.example.UserDao.findAll", mode="CALLERS")

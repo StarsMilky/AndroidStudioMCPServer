@@ -21,6 +21,7 @@ data class ProjectOverview(
     val variant: com.codeintel.mcpserver.models.results.VariantInfo? = null,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

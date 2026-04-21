@@ -13,6 +13,7 @@ data class FrameworkViewResult(
     val navigation: com.codeintel.mcpserver.models.results.NavigationView? = null,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

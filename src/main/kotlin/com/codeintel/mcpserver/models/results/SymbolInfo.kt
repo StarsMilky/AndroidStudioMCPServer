@@ -10,6 +10,7 @@ data class SymbolInfo(
     val kind: com.codeintel.mcpserver.models.results.SymbolKind,
     val declarationColumn: Int = 0,
     val totalMatches: Int? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

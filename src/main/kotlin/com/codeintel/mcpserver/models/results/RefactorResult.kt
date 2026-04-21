@@ -10,6 +10,7 @@ data class RefactorResult(
     val preview: List<com.codeintel.mcpserver.models.results.ChangePreview>? = null,
     val conflicts: List<String>? = null,
     val checkpointLabel: String,
+    val nextAction: String? = null,
 )
 
 @Serializable

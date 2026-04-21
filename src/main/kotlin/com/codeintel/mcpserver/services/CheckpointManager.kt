@@ -28,12 +28,23 @@ object CheckpointManager {
         file: String?,
         targetLabel: String?
     ): CheckpointResult {
-        return when (operation) {
+        val result = when (operation) {
             CheckpointOperation.CREATE -> createCheckpoint(project, label)
             CheckpointOperation.HISTORY -> getHistory(project, file)
             CheckpointOperation.ROLLBACK -> rollback(project, label)
             CheckpointOperation.DIFF -> diff(project, file, targetLabel)
         }
+        val hint = when (operation) {
+            CheckpointOperation.CREATE ->
+                "💡 Next: proceed with your refactor. Use checkpoint(operation='DIFF', target_label='${result.label ?: label ?: ""}') afterwards to review."
+            CheckpointOperation.HISTORY ->
+                "💡 Next: checkpoint(operation='DIFF', file='<path>', target_label='<label>') to see the change."
+            CheckpointOperation.ROLLBACK ->
+                "💡 Rollback completed. Re-read affected files before continuing."
+            CheckpointOperation.DIFF ->
+                "💡 Next: if diff looks wrong, checkpoint(operation='ROLLBACK', label='${targetLabel ?: ""}')."
+        }
+        return result.copy(nextAction = hint)
     }
 
     fun createAutoCheckpoint(project: Project, operationName: String): String {

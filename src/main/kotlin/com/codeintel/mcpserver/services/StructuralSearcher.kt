@@ -1,13 +1,15 @@
 package com.codeintel.mcpserver.services
 
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.StructuralSearchArgs
 import com.codeintel.mcpserver.models.results.SearchMatch
 import com.codeintel.mcpserver.models.results.SearchMatchResult
 import com.codeintel.mcpserver.util.ProjectUtils
 import com.codeintel.mcpserver.util.PsiUtils
-import com.intellij.ide.highlighter.JavaFileType
 import com.intellij.ide.highlighter.XmlFileType
+import com.intellij.lang.Language
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.fileTypes.LanguageFileType
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiManager
@@ -15,19 +17,16 @@ import com.intellij.psi.search.FilenameIndex
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.psi.xml.XmlFile
-import com.intellij.lang.Language
 import com.intellij.structuralsearch.MatchOptions
 import com.intellij.structuralsearch.Matcher
 import com.intellij.structuralsearch.plugin.util.CollectingMatchResultSink
-import org.jetbrains.kotlin.idea.KotlinFileType
-import org.jetbrains.kotlin.idea.KotlinLanguage
 
 object StructuralSearcher {
 
     private val log = Logger.getInstance(StructuralSearcher::class.java)
 
     fun search(project: Project, args: StructuralSearchArgs): SearchMatchResult {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             val scope = resolveScope(project, args.scope)
 
             if (args.fileType.lowercase() == "xml") {
@@ -41,6 +40,12 @@ object StructuralSearcher {
                 searchWithCustomMatcher(project, args, scope)
             }
         }
+        val hint = if (result.total == 0) {
+            "💡 No matches. Try a broader SSR pattern or change file_type."
+        } else {
+            "💡 Next: resolve_symbol(file, line, column) on an interesting match to inspect the symbol."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun searchWithSsr(
@@ -50,14 +55,14 @@ object StructuralSearcher {
     ): SearchMatchResult {
         val matches = mutableListOf<SearchMatch>()
 
-        val fileTypes = when (args.fileType.lowercase()) {
-            "kotlin", "kt" -> listOf(KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE)
-            "java" -> listOf(JavaFileType.INSTANCE to com.intellij.lang.java.JavaLanguage.INSTANCE)
-            "all" -> listOf(
-                KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE,
-                JavaFileType.INSTANCE to com.intellij.lang.java.JavaLanguage.INSTANCE,
-            )
-            else -> listOf(KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE)
+        val fileTypes: List<Pair<LanguageFileType, Language>> = when (args.fileType.lowercase()) {
+            "all" -> LanguageAdapter.all(project).mapNotNull { it.structuralSearchTarget() }
+            else -> {
+                val adapter = LanguageAdapter.byId(args.fileType)
+                    ?: LanguageAdapter.all(project)
+                        .firstOrNull { it.fileExtensions().any { e -> e.equals(args.fileType, true) } }
+                listOfNotNull(adapter?.structuralSearchTarget())
+            }
         }
 
         for ((fileType, language) in fileTypes) {
@@ -124,11 +129,14 @@ object StructuralSearcher {
     ): SearchMatchResult {
         val matches = mutableListOf<SearchMatch>()
         val extensions = when (args.fileType.lowercase()) {
-            "kotlin", "kt" -> listOf("kt")
-            "java" -> listOf("java")
             "xml" -> listOf("xml")
-            "all" -> listOf("kt", "java", "xml")
-            else -> listOf("kt", "java")
+            "all" -> LanguageAdapter.all(project).flatMap { it.fileExtensions() }.distinct() + "xml"
+            else -> {
+                val adapter = LanguageAdapter.byId(args.fileType)
+                    ?: LanguageAdapter.all(project)
+                        .firstOrNull { it.fileExtensions().any { e -> e.equals(args.fileType, true) } }
+                adapter?.fileExtensions() ?: listOf(args.fileType.lowercase())
+            }
         }
 
         for (ext in extensions) {

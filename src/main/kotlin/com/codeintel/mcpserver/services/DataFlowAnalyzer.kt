@@ -2,6 +2,7 @@ package com.codeintel.mcpserver.services
 
 import com.codeintel.mcpserver.errors.McpErrorCode
 import com.codeintel.mcpserver.errors.ToolException
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.AnalyzeDataFlowArgs
 import com.codeintel.mcpserver.models.args.DataFlowMode
 import com.codeintel.mcpserver.models.results.DataFlowResult
@@ -13,7 +14,6 @@ import com.codeintel.mcpserver.util.PsiUtils
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiAnnotation
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiAssignmentExpression
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiField
@@ -21,18 +21,12 @@ import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiModifierListOwner
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.PsiParameter
-import com.intellij.psi.PsiPrimitiveType
-import com.intellij.psi.PsiVariable
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.psi.KtBinaryExpression
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtParameter
-import org.jetbrains.kotlin.psi.KtProperty
 
 object DataFlowAnalyzer {
     fun analyze(project: Project, args: AnalyzeDataFlowArgs): DataFlowResult {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             val vf = ProjectUtils.findFile(project, args.file)
             val psiFile = ProjectUtils.getPsiFile(project, vf)
             val offset = ProjectUtils.lineColumnToOffset(psiFile, args.line, args.column)
@@ -40,43 +34,42 @@ object DataFlowAnalyzer {
                 ?: throw ToolException(McpErrorCode.SYMBOL_NOT_FOUND)
 
             when (args.mode) {
-                DataFlowMode.NULLABILITY -> analyzeNullability(project, element, psiFile)
+                DataFlowMode.NULLABILITY -> analyzeNullability(project, element)
                 DataFlowMode.FORWARD -> analyzeForward(project, element, psiFile)
                 DataFlowMode.BACKWARD -> analyzeBackward(project, element, psiFile)
                 DataFlowMode.EXTERNAL_ANNOTATIONS -> analyzeExternalAnnotations(project, element)
             }
         }
+        val hint = when (args.mode) {
+            DataFlowMode.NULLABILITY ->
+                "💡 Next: if nullable, find_references(mode='USAGES') on this symbol to see if any call site handles null."
+            DataFlowMode.FORWARD ->
+                "💡 Next: for any downstream consumer of interest, resolve_symbol(file,line,col) to learn its type."
+            DataFlowMode.BACKWARD ->
+                "💡 Next: pick a source and find_references(mode='CALLERS') to see which callers feed this value."
+            DataFlowMode.EXTERNAL_ANNOTATIONS ->
+                "💡 Next: use resolve_symbol(file,line,col) to confirm the annotated library method signature."
+        }
+        return result.copy(nextAction = hint)
     }
 
-    private fun analyzeNullability(
-        project: Project,
-        element: PsiElement,
-        psiFile: PsiFile
-    ): DataFlowResult {
-        val javaVar = element.parent as? PsiVariable
-        if (javaVar != null) {
-            return analyzeJavaNullability(project, javaVar)
+    private fun analyzeNullability(project: Project, element: PsiElement): DataFlowResult {
+        val adapters = LanguageAdapter.all(project)
+
+        // Adapter-owned cursor-based nullability (walks up to find declaring var/param).
+        for (adapter in adapters) {
+            val owned = adapter.analyzeNullabilityFromCursor(project, element)
+            if (owned != null) return owned
         }
 
-        val ktProp = PsiTreeUtil.getParentOfType(element, KtProperty::class.java)
-        if (ktProp != null) {
-            return analyzeKotlinPropertyNullability(project, ktProp)
-        }
-
-        val ktParam = PsiTreeUtil.getParentOfType(element, KtParameter::class.java)
-        if (ktParam != null) {
-            val typeText = ktParam.typeReference?.text ?: "Any"
-            val isNullable = typeText.endsWith("?")
-            return DataFlowResult(
-                nullability = if (isNullable) "nullable" else "non_null",
-                reason = "Kotlin parameter type: $typeText"
-            )
-        }
-
+        // Fallback: resolve reference, then ask adapters about the resolved target.
         val ref = element.parent?.reference ?: element.reference
         val resolved = ref?.resolve()
         if (resolved != null) {
-            return analyzeResolvedNullability(project, resolved)
+            for (adapter in adapters) {
+                val owned = adapter.analyzeNullabilityOfResolved(project, resolved)
+                if (owned != null) return owned
+            }
         }
 
         return DataFlowResult(
@@ -84,134 +77,6 @@ object DataFlowAnalyzer {
             reason = "Unable to determine nullability: element type is " +
                 element.javaClass.simpleName
         )
-    }
-
-    private fun analyzeJavaNullability(project: Project, variable: PsiVariable): DataFlowResult {
-        val type = variable.type
-        val annotations = variable.annotations
-        val hasNullable = annotations.any { ann ->
-            val fqn = ann.qualifiedName ?: ""
-            fqn.contains("Nullable")
-        }
-        val hasNonNull = annotations.any { ann ->
-            val fqn = ann.qualifiedName ?: ""
-            fqn.contains("NonNull") || fqn.contains("NotNull") || fqn.contains("Nonnull")
-        }
-
-        val nullPaths = mutableListOf<String>()
-        val initializer = variable.initializer
-        if (initializer != null) {
-            if (initializer.text == "null") {
-                nullPaths.add("initialized to null at declaration")
-            }
-        }
-
-        val usages = ReferencesSearch.search(variable).findAll()
-        for (ref in usages.take(20)) {
-            val assignExpr = PsiTreeUtil.getParentOfType(
-                ref.element,
-                PsiAssignmentExpression::class.java
-            )
-            if (assignExpr != null && assignExpr.rExpression?.text == "null") {
-                val doc = PsiDocumentManager.getInstance(project)
-                    .getDocument(ref.element.containingFile)
-                val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
-                nullPaths.add("assigned null at line $line")
-            }
-        }
-
-        val nullability = when {
-            hasNonNull -> "non_null"
-            hasNullable -> "nullable"
-            type.canonicalText.endsWith("?") -> "nullable"
-            nullPaths.isNotEmpty() -> "possibly_null"
-            type is PsiPrimitiveType -> "non_null"
-            else -> "platform_type"
-        }
-
-        return DataFlowResult(
-            nullability = nullability,
-            reason = "Java type: ${type.canonicalText}, annotations: " +
-                annotations.map { it.qualifiedName },
-            nullPaths = nullPaths.ifEmpty { null }
-        )
-    }
-
-    private fun analyzeKotlinPropertyNullability(
-        project: Project,
-        prop: KtProperty
-    ): DataFlowResult {
-        val typeText = prop.typeReference?.text
-        val initializer = prop.initializer
-
-        val nullPaths = mutableListOf<String>()
-        val isExplicitlyNullable = typeText?.endsWith("?") == true
-
-        if (initializer?.text == "null") {
-            nullPaths.add("initialized to null at declaration")
-        }
-
-        if (prop.isVar) {
-            val usages = ReferencesSearch.search(prop).findAll()
-            for (ref in usages.take(20)) {
-                val parent = ref.element.parent
-                if (parent is KtBinaryExpression &&
-                    parent.operationToken == org.jetbrains.kotlin.lexer.KtTokens.EQ) {
-                    if (parent.right?.text == "null") {
-                        val doc = PsiDocumentManager.getInstance(project)
-                    .getDocument(ref.element.containingFile)
-                        val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
-                        nullPaths.add("assigned null at line $line")
-                    }
-                }
-            }
-        }
-
-        val delegateText = prop.delegateExpression?.text
-        val isLazy = delegateText?.startsWith("lazy") == true
-        val isLateinit = prop.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.LATEINIT_KEYWORD)
-
-        val nullability = when {
-            isLateinit -> "lateinit (non_null after init, throws before)"
-            isLazy -> "non_null (lazy initialized)"
-            isExplicitlyNullable -> "nullable"
-            typeText != null -> "non_null"
-            initializer != null && initializer.text != "null" -> "non_null (inferred)"
-            else -> "unknown"
-        }
-
-        val inferredType = typeText
-            ?: (if (initializer != null)
-                "inferred from: ${initializer.text.take(50)}"
-            else
-                "unknown")
-
-        return DataFlowResult(
-            nullability = nullability,
-            reason = "Kotlin property type: $inferredType, var=${prop.isVar}",
-            nullPaths = nullPaths.ifEmpty { null }
-        )
-    }
-
-    private fun analyzeResolvedNullability(
-        project: Project,
-        resolved: PsiElement
-    ): DataFlowResult {
-        return when (resolved) {
-            is PsiVariable -> analyzeJavaNullability(project, resolved)
-            is KtProperty -> analyzeKotlinPropertyNullability(project, resolved)
-            is KtParameter -> {
-                val typeText = resolved.typeReference?.text ?: "Any"
-                DataFlowResult(
-                    nullability = if (typeText.endsWith("?")) "nullable" else "non_null",
-                    reason = "Kotlin parameter type: $typeText"
-                )
-            }
-            else -> DataFlowResult(
-                nullability = "unknown",
-                reason = "Cannot determine nullability for ${resolved.javaClass.simpleName}"
-            )
-        }
     }
 
     private fun analyzeForward(
@@ -266,58 +131,11 @@ object DataFlowAnalyzer {
 
         val steps = mutableListOf<FlowStep>()
 
-        when (target) {
-            is PsiVariable -> {
-                val initializer = target.initializer
-                if (initializer != null) {
-                    val file = target.containingFile?.virtualFile
-                    if (file != null) {
-                        val doc = PsiDocumentManager.getInstance(project)
-                            .getDocument(target.containingFile)
-                        val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
-                        steps.add(FlowStep(
-                            file = ProjectUtils.toRelativePath(project, file),
-                            line = line,
-                            code = "initializer: ${initializer.text.take(100)}"
-                        ))
-                    }
-                }
-            }
-            is KtProperty -> {
-                val initializer = target.initializer
-                if (initializer != null) {
-                    val file = target.containingFile?.virtualFile
-                    if (file != null) {
-                        val doc = PsiDocumentManager.getInstance(project)
-                            .getDocument(target.containingFile)
-                        val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
-                        steps.add(FlowStep(
-                            file = ProjectUtils.toRelativePath(project, file),
-                            line = line,
-                            code = "initializer: ${initializer.text.take(100)}"
-                        ))
-                    }
-                }
-            }
-            is KtParameter -> {
-                val fn = PsiTreeUtil.getParentOfType(target, KtNamedFunction::class.java)
-                if (fn != null) {
-                    val callers = ReferencesSearch.search(fn).findAll().take(10)
-                    for (caller in callers) {
-                        val callerFile = caller.element.containingFile?.virtualFile ?: continue
-                        val callerDoc = PsiDocumentManager.getInstance(project)
-                            .getDocument(caller.element.containingFile) ?: continue
-                        val callerLine = callerDoc.getLineNumber(caller.element.textOffset) + 1
-                        val lineStart = callerDoc.getLineStartOffset(callerLine - 1)
-                        val lineEnd = callerDoc.getLineEndOffset(callerLine - 1)
-                        val lineText = callerDoc.text.substring(lineStart, lineEnd).trim()
-                        steps.add(FlowStep(
-                            file = ProjectUtils.toRelativePath(project, callerFile),
-                            line = callerLine,
-                            code = "caller: ${lineText.take(120)}"
-                        ))
-                    }
-                }
+        for (adapter in LanguageAdapter.all(project)) {
+            val adapterSteps = adapter.backwardFlowSteps(project, target)
+            if (adapterSteps != null) {
+                steps.addAll(adapterSteps)
+                break
             }
         }
 

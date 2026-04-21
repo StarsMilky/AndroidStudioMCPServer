@@ -8,6 +8,7 @@ data class DataFlowResult(
     val nullPaths: List<String>? = null,
     val flowPaths: List<com.codeintel.mcpserver.models.results.FlowPath>? = null,
     val annotations: List<com.codeintel.mcpserver.models.results.ExternalAnnotationInfo>? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

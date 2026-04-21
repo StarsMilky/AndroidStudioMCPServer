@@ -2,6 +2,7 @@ package com.codeintel.mcpserver.services
 
 import com.codeintel.mcpserver.errors.McpErrorCode
 import com.codeintel.mcpserver.errors.ToolException
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.RefactorArgs
 import com.codeintel.mcpserver.models.args.RefactorOperation
 import com.codeintel.mcpserver.models.results.RefactorResult
@@ -10,37 +11,34 @@ import com.codeintel.mcpserver.util.PsiUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.command.WriteCommandAction
 import com.intellij.openapi.project.Project
-import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDirectory
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiElementFactory
 import com.intellij.psi.PsiFile
-import com.intellij.psi.PsiJavaFile
 import com.intellij.psi.PsiManager
-import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.search.searches.ReferencesSearch
 import com.intellij.psi.util.PsiTreeUtil
 import com.intellij.refactoring.RefactoringFactory
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtFile
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtPsiFactory
-import org.jetbrains.kotlin.psi.KtTypeReference
 
 object RefactorExecutor {
 
     fun execute(project: Project, args: RefactorArgs): RefactorResult {
         val checkpointLabel = CheckpointManager.createAutoCheckpoint(project, args.operation.name.lowercase())
 
-        return when (args.operation) {
+        val result = when (args.operation) {
             RefactorOperation.RENAME -> executeRename(project, args, checkpointLabel)
             RefactorOperation.MOVE -> executeMove(project, args, checkpointLabel)
             RefactorOperation.EXTRACT -> executeExtract(project, args, checkpointLabel)
             RefactorOperation.SAFE_DELETE -> executeSafeDelete(project, args, checkpointLabel)
             RefactorOperation.CHANGE_SIGNATURE -> executeChangeSignature(project, args, checkpointLabel)
         }
+        val hint = if (result.success) {
+            "💡 Next: checkpoint(operation='DIFF', file='${args.file}', target_label='$checkpointLabel') to review, or ROLLBACK to revert."
+        } else {
+            "💡 Next: inspect conflicts[] above; fix or call checkpoint(operation='ROLLBACK', label='$checkpointLabel') to revert."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun executeRename(project: Project, args: RefactorArgs, checkpointLabel: String): RefactorResult {
@@ -87,15 +85,10 @@ object RefactorExecutor {
             val vf = ProjectUtils.findFile(project, args.file)
             val psiFile = ProjectUtils.getPsiFile(project, vf)
             val affectedFiles = mutableListOf(args.file)
-            val refs = when (psiFile) {
-                is PsiJavaFile -> psiFile.classes.flatMap { cls ->
-                    ReferencesSearch.search(cls).findAll().toList()
-                }
-                is KtFile -> psiFile.declarations.flatMap { decl ->
-                    ReferencesSearch.search(decl).findAll().toList()
-                }
-                else -> emptyList()
-            }
+            val decls = LanguageAdapter.all(project)
+                .firstNotNullOfOrNull { it.listMovableDeclarations(psiFile) }
+                ?: emptyList()
+            val refs = decls.flatMap { d -> ReferencesSearch.search(d).findAll().toList() }
             affectedFiles.addAll(refs.mapNotNull { r ->
                 r.element.containingFile?.virtualFile?.let { ProjectUtils.toRelativePath(project, it) }
             }.distinct())
@@ -107,24 +100,7 @@ object RefactorExecutor {
         ApplicationManager.getApplication().invokeAndWait {
             WriteCommandAction.runWriteCommandAction(project) {
                 val targetDir = findOrCreatePackageDir(project, psiFile, targetPackage)
-                when (psiFile) {
-                    is PsiJavaFile -> {
-                        val packageStatement = psiFile.packageStatement
-                        val factory = PsiElementFactory.getInstance(project)
-                        if (packageStatement != null) {
-                            packageStatement.replace(factory.createPackageStatement(targetPackage))
-                        }
-                    }
-                    is KtFile -> {
-                        val packageDirective = psiFile.packageDirective
-                        val newDirective = KtPsiFactory(project).createPackageDirective(
-                            org.jetbrains.kotlin.name.FqName(targetPackage)
-                        )
-                        if (packageDirective != null) {
-                            packageDirective.replace(newDirective)
-                        }
-                    }
-                }
+                LanguageAdapter.all(project).any { it.setFilePackage(psiFile, targetPackage) }
                 if (targetDir != null) {
                     targetDir.add(psiFile.copy())
                     psiFile.delete()
@@ -181,11 +157,8 @@ object RefactorExecutor {
             val startOffset = document.getLineStartOffset(startLine - 1)
             val endOffset = document.getLineEndOffset(endLine - 1)
             val selectedText = document.text.substring(startOffset, endOffset)
-            val containingClass = PsiTreeUtil.findChildrenOfAnyType(
-                psiFile, PsiClass::class.java, KtClass::class.java
-            ).firstOrNull { cls ->
-                cls.textRange.startOffset <= startOffset && cls.textRange.endOffset >= endOffset
-            }
+            val containingClass = LanguageAdapter.all(project)
+                .firstNotNullOfOrNull { it.findContainingClassLike(psiFile, startOffset, endOffset) }
             ExtractInfo(psiFile, startOffset, endOffset, selectedText, containingClass)
         }
 
@@ -199,30 +172,19 @@ object RefactorExecutor {
 
         ApplicationManager.getApplication().invokeAndWait {
             WriteCommandAction.runWriteCommandAction(project) {
-                val document = PsiDocumentManager.getInstance(project).getDocument(info.psiFile) ?: return@runWriteCommandAction
-                when (info.psiFile) {
-                    is KtFile -> {
-                        val factory = KtPsiFactory(project)
-                        val newMethod = factory.createFunction("private fun $methodName() {\n${info.selectedText}\n}")
-                        val ktClass = info.containingClass as? KtClass
-                        if (ktClass != null) {
-                            val body = ktClass.body
-                            if (body != null) {
-                                body.addBefore(newMethod, body.rBrace)
-                                body.addBefore(factory.createNewLine(), body.rBrace)
-                            }
-                        }
-                        document.replaceString(info.startOffset, info.endOffset, "$methodName()")
-                        PsiDocumentManager.getInstance(project).commitDocument(document)
-                    }
-                    is PsiJavaFile -> {
-                        val factory = PsiElementFactory.getInstance(project)
-                        val methodText = "private void $methodName() {\n${info.selectedText}\n}"
-                        val newMethod = factory.createMethodFromText(methodText, info.containingClass)
-                        (info.containingClass as? PsiClass)?.add(newMethod)
-                        document.replaceString(info.startOffset, info.endOffset, "$methodName();")
-                        PsiDocumentManager.getInstance(project).commitDocument(document)
-                    }
+                val document = PsiDocumentManager.getInstance(project).getDocument(info.psiFile)
+                    ?: return@runWriteCommandAction
+                val adapters = LanguageAdapter.all(project)
+                val containingClass = info.containingClass
+                val inserted = adapters.any {
+                    it.extractMethodInClass(containingClass, methodName, info.selectedText)
+                }
+                if (inserted) {
+                    val callExpr = adapters
+                        .firstNotNullOfOrNull { it.extractMethodCallExpression(containingClass, methodName) }
+                        ?: "$methodName()"
+                    document.replaceString(info.startOffset, info.endOffset, callExpr)
+                    PsiDocumentManager.getInstance(project).commitDocument(document)
                 }
             }
         }
@@ -271,13 +233,13 @@ object RefactorExecutor {
     private fun executeChangeSignature(project: Project, args: RefactorArgs, checkpointLabel: String): RefactorResult {
         val readResult = PsiUtils.smartReadAction(project) {
             val element = resolveTargetElement(project, args)
-            val method = when (element) {
-                is PsiMethod -> element
-                is KtNamedFunction -> element
-                else -> throw ToolException(
-                    McpErrorCode.INVALID_SCOPE, mapOf("reason" to "Target must be a method/function for change_signature")
+            val adapters = LanguageAdapter.all(project)
+            val method = if (adapters.any { it.isMethodLike(element) }) element
+                else adapters.firstNotNullOfOrNull { it.findEnclosingMethod(element) }
+                ?: throw ToolException(
+                    McpErrorCode.INVALID_SCOPE,
+                    mapOf("reason" to "Target must be a method/function for change_signature")
                 )
-            }
             val usages = ReferencesSearch.search(method).findAll()
             val affectedFiles = usages
                 .mapNotNull { it.element.containingFile?.virtualFile }
@@ -292,47 +254,12 @@ object RefactorExecutor {
 
         ApplicationManager.getApplication().invokeAndWait {
             WriteCommandAction.runWriteCommandAction(project) {
-                when (method) {
-                    is KtNamedFunction -> {
-                        val factory = KtPsiFactory(project)
-                        if (args.newReturnType != null) {
-                            val typeRef = method.typeReference
-                            if (typeRef != null) {
-                                typeRef.replace(factory.createTypeCodeFragment(args.newReturnType, method).getContentElement()!!)
-                            } else {
-                                method.setTypeReference(factory.createTypeCodeFragment(args.newReturnType, method).getContentElement() as KtTypeReference)
-                            }
-                        }
-                        if (args.newParameters != null) {
-                            val paramList = method.valueParameterList
-                            if (paramList != null) {
-                                val newParams = args.newParameters.joinToString(", ") { p ->
-                                    val default = if (p.defaultValue != null) " = ${p.defaultValue}" else ""
-                                    "${p.name}: ${p.type}$default"
-                                }
-                                val newFunction = factory.createFunction("fun temp($newParams) {}")
-                                paramList.replace(newFunction.valueParameterList!!)
-                            }
-                        }
-                    }
-                    is PsiMethod -> {
-                        val factory = PsiElementFactory.getInstance(project)
-                        if (args.newReturnType != null) {
-                            val newType = factory.createTypeFromText(args.newReturnType, method)
-                            val oldReturnType = method.returnTypeElement
-                            if (oldReturnType != null) {
-                                oldReturnType.replace(factory.createTypeElement(newType))
-                            }
-                        }
-                        if (args.newParameters != null) {
-                            val paramList = method.parameterList
-                            for (param in paramList.parameters) { param.delete() }
-                            for (p in args.newParameters) {
-                                val type = factory.createTypeFromText(p.type, method)
-                                paramList.add(factory.createParameter(p.name, type))
-                            }
-                        }
-                    }
+                val adapters = LanguageAdapter.all(project)
+                if (args.newReturnType != null) {
+                    adapters.any { it.changeReturnType(method, args.newReturnType) }
+                }
+                if (args.newParameters != null) {
+                    adapters.any { it.changeParameters(method, args.newParameters) }
                 }
             }
         }

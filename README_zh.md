@@ -4,9 +4,9 @@
 
 > **[English Documentation](README.md)**
 
-一个 IntelliJ 平台插件，通过 [MCP 协议](https://modelcontextprotocol.io/) 向 AI Agent 暴露 **12 个 IDE 级别的代码智能工具**。支持 **Android Studio**、**IntelliJ IDEA** 及其他 JetBrains IDE。
+一个 IntelliJ 平台插件，通过 [MCP 协议](https://modelcontextprotocol.io/) 向 AI Agent 暴露 **13 个 IDE 级别的代码智能工具**。支持 **Android Studio**、**IntelliJ IDEA** 及其他 JetBrains IDE。
 
-让 AI Agent 不再依赖 `grep` 和文件读取来"猜测"代码结构，而是直接使用 IDE 内部的语义分析能力——类型解析、引用图谱、调用链、数据流分析和安全重构。
+让 AI Agent 不再依赖 `grep` 和文件读取来"猜测"代码结构，而是直接使用 IDE 内部的语义分析能力——类型解析、引用图谱、调用链、数据流分析和安全重构。每次工具响应都附带 `nextAction` 提示，驱动 Agent 自动链式调用。
 
 ---
 
@@ -14,8 +14,8 @@
 
 | 任务 | 没有 MCP | 有 MCP |
 |------|---------|--------|
-| "UserRepository 在哪里？" | `grep` → 噪声高、多余结果 | `resolve_symbol(name="UserRepository")` → 精确声明位置（file+line+column） |
-| "这个变量是什么类型？" | 读整个文件，靠上下文猜 | `resolve_symbol` → 精确限定类型，仅 50 tokens |
+| "UserRepository 在哪里？" | `grep` → 噪声高、多余结果 | `find_symbol(name="UserRepository")` → 精确声明位置（file+line+column） |
+| "这个变量是什么类型？" | 读整个文件，靠上下文猜 | `resolve_symbol(file, line, col)` → 精确限定类型，仅 50 tokens |
 | "谁调用了这个方法？" | `grep` → 噪声高、有误报 | `find_references(qualified_name="com.Foo.bar", mode="CALLERS")` → 语义级调用链，无需知道位置 |
 | "这个参数可为 null 吗？" | CLI 无法判断 | `analyze_data_flow(NULLABILITY)` → PSI 级推理 |
 | "安全重命名" | `sed` → 漏改 XML / Manifest | `refactor(RENAME)` → 跨语言更新所有引用 |
@@ -36,11 +36,12 @@
 
 ---
 
-## 12 个工具一览
+## 13 个工具一览
 
 | 工具 | 功能说明 |
 |------|---------|
-| `resolve_symbol` | 按位置（file+line+column）或按名称解析符号——返回类型、种类、限定名和声明位置 |
+| `resolve_symbol` | 按位置（file+line+column）解析符号——返回类型、种类、限定名和声明位置 |
+| `find_symbol` | 按简单名称或全限定名定位符号——取代 `grep` 做符号查找 |
 | `find_references` | 语义级引用查找——按位置或按全限定名，支持调用方、被调用方、类型层级 |
 | `get_scope` | 获取指定位置所有可见符号 |
 | `query_project` | 项目全景图、依赖影响分析、API 表面、构建变体 |
@@ -52,6 +53,8 @@
 | `refactor` | 重命名、移动、提取、安全删除、修改签名 |
 | `checkpoint` | 创建 / 查看 / 回滚 IDE 本地历史快照 |
 | `sandbox` | 反编译库类、Java 转 Kotlin、批量代码检查修复 |
+
+> **v2.0 破坏性变更：** `resolve_symbol` 已改为仅按位置查询。名称查询请改用新的 `find_symbol` 工具。
 
 ---
 
@@ -108,7 +111,7 @@ cd android-studio-mcpserver
 │           (MCP Streamable HTTP 传输层)                │
 ├─────────────────────────────────────────────────────┤
 │                  ToolRegistrar                       │
-│           12 工具 × ToolMetricsService               │
+│           13 工具 × ToolMetricsService               │
 ├──────────┬──────────┬──────────┬────────────────────┤
 │ 符号解析  │ 引用搜索  │ 项目分析  │ 质量 / 规则 /      │
 │          │          │          │ 数据流 / SSR /      │

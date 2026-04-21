@@ -4,19 +4,29 @@
     <vendor url="https://github.com/StarsMilky" email="starsmilky@users.noreply.github.com">StarsMilky</vendor>
 
     <description><![CDATA[
-<p><b>MCP Code Intelligence</b> exposes <b>12 IDE-level semantic analysis tools</b>
+<p><b>MCP Code Intelligence</b> exposes <b>13 IDE-level semantic analysis tools</b>
 to AI agents through the <a href="https://modelcontextprotocol.io/">Model Context Protocol (MCP)</a>.</p>
 
-<p>Instead of relying on <code>grep</code> and file reads, AI agents get direct access to the same
+<p><b>Stop burning tokens on grep.</b> AI agents get direct access to the same
 understanding your IDE uses internally — type resolution, reference graphs, call hierarchies,
-data flow analysis, and safe cross-language refactoring.</p>
+data flow analysis, and safe cross-language refactoring. Every response includes a
+<code>nextAction</code> hint that guides the agent to the optimal follow-up call.</p>
+
+<h3>Why agents pick these over CLI</h3>
+<ul>
+  <li><b>Zero false positives</b> — reference search uses the IDE's semantic index, not text matching</li>
+  <li><b>Structured responses</b> with file+line+column and nextAction hints — agents chain tools automatically</li>
+  <li><b>Refactoring is safe</b> — rename/move/extract update every reference across Java/Kotlin/XML/Manifest</li>
+  <li><b>Works across Java, Kotlin, and mixed codebases</b> — including Android, Compose, Room, Hilt, Retrofit, Navigation</li>
+</ul>
 
 <h3>Tools</h3>
 <ul>
-  <li><b>resolve_symbol</b> — Fully-qualified type, declaration location, and symbol kind at any position</li>
-  <li><b>find_references</b> — Semantic usages, callers, callees, and type hierarchy (zero false positives)</li>
+  <li><b>resolve_symbol</b> — Type and declaration location at a code position</li>
+  <li><b>find_symbol</b> — Locate a symbol by simple or fully-qualified name (no grep!)</li>
+  <li><b>find_references</b> — Usages, callers, callees, type hierarchy (by position OR qualified name)</li>
   <li><b>get_scope</b> — All visible symbols: locals, members, extensions, imports</li>
-  <li><b>query_project</b> — Project overview, dependency graph, API surface, build variants</li>
+  <li><b>query_project</b> — Project overview, dependency impact, API surface, build variants</li>
   <li><b>query_framework</b> — Room / Retrofit / Hilt / Compose / Navigation structural views</li>
   <li><b>analyze_data_flow</b> — Nullability inference, forward/backward value propagation</li>
   <li><b>analyze_quality</b> — Complexity hotspots, dead code, clones, error handling</li>
@@ -34,12 +44,51 @@ data flow analysis, and safe cross-language refactoring.</p>
   <li>Per-tool metrics: invocation count, token usage, execution time</li>
   <li>Supports both K1 and K2 Kotlin compilers</li>
 </ul>
+
+<h3>What's new in v2.0</h3>
+<ul>
+  <li>🆕 New <b>find_symbol</b> tool — dedicated name-based lookup, replaces overloaded resolve_symbol</li>
+  <li>🆕 Every tool response now carries a <code>nextAction</code> hint to guide AI follow-up</li>
+  <li>✏️ All tool descriptions rewritten for LLM pickability (explicit "USE THIS INSTEAD OF grep" triggers)</li>
+  <li>⚠️ <b>Breaking:</b> resolve_symbol no longer accepts <code>name</code>/<code>kind</code>/<code>scope</code>/<code>limit</code> — use find_symbol</li>
+</ul>
     ]]></description>
 
+    <change-notes><![CDATA[
+<h3>2.0.0</h3>
+<ul>
+  <li>🆕 New tool: <b>find_symbol</b> — dedicated name-based lookup (simple name / FQN / member / kind filter), replaces overloaded resolve_symbol</li>
+  <li>🆕 Every tool response now carries a <code>nextAction</code> hint to guide AI follow-up calls</li>
+  <li>✏️ All tool descriptions rewritten for LLM pickability (explicit "USE THIS INSTEAD OF grep" triggers)</li>
+  <li>🏗️ Architectural revamp — decoupled services from Kotlin/Java PSI via <code>LanguageAdapter</code> extension point; services/ directory now zero direct kotlin-PSI references</li>
+  <li>🏗️ Physically split plugin.xml into optional modules (mcp-java.xml / mcp-kotlin.xml) — plugin can now load in PyCharm / GoLand / WebStorm / RubyMine; language adapters activate only when their respective IDE plugin is present</li>
+  <li>🔌 New extension points <code>com.codeintel.mcpserver.languageAdapter</code> and <code>com.codeintel.mcpserver.frameworkAdapter</code> for third-party extension</li>
+  <li>⚠️ <b>Breaking:</b> <code>resolve_symbol</code> is position-only now; migrate name-based lookups to <code>find_symbol</code></li>
+</ul>
+
+<h3>1.0.0 — Initial Release</h3>
+<ul>
+  <li>12 MCP tools: resolve_symbol, find_references, get_scope, query_project, query_framework, analyze_data_flow, analyze_quality, check_rules, structural_search, refactor, checkpoint, sandbox</li>
+  <li>Embedded Ktor HTTP server with Streamable MCP transport</li>
+  <li>Built-in Tool Window with server status, Cursor config, and per-tool metrics</li>
+  <li>One-click Cursor auto-configuration</li>
+  <li>K1 and K2 Kotlin compiler support</li>
+</ul>
+    ]]></change-notes>
+
     <depends>com.intellij.modules.platform</depends>
-    <depends>com.intellij.java</depends>
-    <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.modules.json</depends>
+    <depends optional="true" config-file="mcp-java.xml">com.intellij.java</depends>
+    <depends optional="true" config-file="mcp-kotlin.xml">org.jetbrains.kotlin</depends>
+
+    <extensionPoints>
+        <extensionPoint qualifiedName="com.codeintel.mcpserver.languageAdapter"
+                        interface="com.codeintel.mcpserver.lang.LanguageAdapter"
+                        dynamic="true"/>
+        <extensionPoint qualifiedName="com.codeintel.mcpserver.frameworkAdapter"
+                        interface="com.codeintel.mcpserver.framework.FrameworkAdapter"
+                        dynamic="true"/>
+    </extensionPoints>
 
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity
@@ -53,7 +102,15 @@ data flow analysis, and safe cross-language refactoring.</p>
                            displayType="BALLOON"/>
     </extensions>
 
+    <extensions defaultExtensionNs="com.codeintel.mcpserver">
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.RoomFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.RetrofitFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.HiltFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.ComposeFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.NavigationFrameworkAdapter"/>
+    </extensions>
+
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
-        <supportsKotlinPluginMode supportsK1="true" supportsK2="true" />
+        <supportsKotlinPluginMode supportsK1="true" supportsK2="true"/>
     </extensions>
 </idea-plugin>

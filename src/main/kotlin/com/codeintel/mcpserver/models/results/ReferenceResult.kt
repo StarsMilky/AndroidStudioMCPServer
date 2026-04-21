@@ -10,6 +10,7 @@ data class ReferenceResult(
     val typeHierarchy: com.codeintel.mcpserver.models.results.TypeHierarchyInfo? = null,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

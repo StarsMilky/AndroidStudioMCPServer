@@ -1,0 +1,1017 @@
+package com.codeintel.mcpserver.lang
+
+import com.codeintel.mcpserver.models.results.SymbolKind
+import com.codeintel.mcpserver.models.results.UsageType
+import com.intellij.lang.Language
+import com.intellij.openapi.fileTypes.LanguageFileType
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiFile
+import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.asJava.toLightClass
+import org.jetbrains.kotlin.idea.KotlinFileType
+import org.jetbrains.kotlin.idea.KotlinLanguage
+import org.jetbrains.kotlin.psi.KtBinaryExpression
+import org.jetbrains.kotlin.psi.KtCallExpression
+import org.jetbrains.kotlin.psi.KtClass
+import org.jetbrains.kotlin.psi.KtClassOrObject
+import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.psi.KtImportDirective
+import org.jetbrains.kotlin.psi.KtNamedDeclaration
+import org.jetbrains.kotlin.psi.KtNamedFunction
+import org.jetbrains.kotlin.psi.KtObjectDeclaration
+import org.jetbrains.kotlin.psi.KtPackageDirective
+import org.jetbrains.kotlin.psi.KtParameter
+import org.jetbrains.kotlin.psi.KtProperty
+
+/**
+ * LanguageAdapter for Kotlin. Registered through the `com.codeintel.mcpserver.languageAdapter`
+ * extension point from the mcp-kotlin descriptor (requires `org.jetbrains.kotlin`).
+ *
+ * All Kotlin PSI imports live here so that the core plugin can load without
+ * org.jetbrains.kotlin being present (e.g. IDEs that don't ship Kotlin support).
+ */
+class KotlinLanguageAdapter : LanguageAdapter {
+    override val id: String = "KOTLIN"
+
+    override fun canHandle(file: PsiFile): Boolean = file is KtFile
+
+    override fun listTopLevelSymbols(file: PsiFile): List<PsiElement> {
+        val kt = file as? KtFile ?: return emptyList()
+        return kt.declarations.toList()
+    }
+
+    override fun getContainingSymbol(element: PsiElement): PsiElement? =
+        PsiTreeUtil.getParentOfType(
+            element,
+            KtNamedFunction::class.java,
+            KtProperty::class.java,
+            KtClassOrObject::class.java
+        )
+
+    override fun qualifiedName(element: PsiElement): String? = when (element) {
+        is KtClassOrObject -> element.fqName?.asString()
+        is KtNamedFunction -> element.fqName?.asString()
+        is KtProperty -> element.fqName?.asString()
+        is KtNamedDeclaration -> element.fqName?.asString()
+        else -> null
+    }
+
+    override fun fileExtensions(): List<String> = listOf("kt", "kts")
+
+    override fun packageName(file: PsiFile): String? =
+        (file as? KtFile)?.packageFqName?.asString()
+
+    override fun importedFqNames(file: PsiFile): List<String>? {
+        val kt = file as? KtFile ?: return null
+        return kt.importDirectives.mapNotNull { it.importedFqName?.asString() }
+    }
+
+    override fun structuralSearchTarget(): Pair<LanguageFileType, Language> =
+        KotlinFileType.INSTANCE to KotlinLanguage.INSTANCE
+
+    override fun findEnclosingPackageDirective(element: PsiElement): Pair<PsiElement, String>? {
+        val pkg = PsiTreeUtil.getParentOfType(element, KtPackageDirective::class.java, false) ?: return null
+        return pkg to pkg.fqName.asString()
+    }
+
+    override fun findEnclosingImportDirective(element: PsiElement): Pair<PsiElement, String>? {
+        val imp = PsiTreeUtil.getParentOfType(element, KtImportDirective::class.java, false) ?: return null
+        val fqn = imp.importedFqName?.asString() ?: imp.text ?: return null
+        return imp to fqn
+    }
+
+    override fun classifySymbol(element: PsiElement): SymbolKind? = when (element) {
+        is KtClass -> SymbolKind.CLASS
+        is KtObjectDeclaration -> SymbolKind.OBJECT
+        is KtNamedFunction -> SymbolKind.METHOD
+        is KtProperty -> SymbolKind.PROPERTY
+        is KtParameter -> SymbolKind.PARAMETER
+        else -> null
+    }
+
+    override fun qualifiedSignature(element: PsiElement): String? = when (element) {
+        is KtClassOrObject -> element.fqName?.asString() ?: element.name
+        is KtNamedFunction -> element.fqName?.asString() ?: element.name
+        is KtProperty -> element.fqName?.asString() ?: element.name
+        is KtParameter -> element.name
+        is KtNamedDeclaration -> element.fqName?.asString() ?: element.name
+        else -> null
+    }
+
+    override fun classifyUsage(element: PsiElement): UsageType? {
+        val parent = element.parent ?: return null
+        return when {
+            parent is KtCallExpression -> UsageType.CALL
+            parent is KtBinaryExpression && parent.left == element &&
+                parent.operationReference.text == "=" -> UsageType.WRITE
+            else -> null
+        }
+    }
+
+    override fun isMethodLike(element: PsiElement): Boolean = element is KtNamedFunction
+
+    override fun findEnclosingMethod(element: PsiElement): PsiElement? =
+        if (element is KtNamedFunction) element
+        else PsiTreeUtil.getParentOfType(element, KtNamedFunction::class.java)
+
+    override fun getMethodBody(method: PsiElement): PsiElement? {
+        val fn = method as? KtNamedFunction ?: return null
+        return fn.bodyBlockExpression ?: fn.bodyExpression
+    }
+
+    override fun resolveCallTarget(element: PsiElement): PsiElement? {
+        val call = element as? KtCallExpression ?: return null
+        return call.calleeExpression?.references
+            ?.firstNotNullOfOrNull { it.resolve() }
+            ?: call.references.firstNotNullOfOrNull { it.resolve() }
+    }
+
+    override fun asPsiClass(element: PsiElement): PsiClass? = when (element) {
+        is KtClass -> element.toLightClass()
+        is KtClassOrObject -> element.toLightClass()
+        else -> null
+    }
+
+    override fun collectBlockLocals(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val block = element as? org.jetbrains.kotlin.psi.KtBlockExpression ?: return null
+        return block.statements
+            .filterIsInstance<KtProperty>()
+            .filter { it.isLocal }
+            .mapNotNull { p ->
+                val name = p.name ?: return@mapNotNull null
+                com.codeintel.mcpserver.models.results.ScopeSymbol(
+                    name = name,
+                    type = p.typeReference?.text ?: "Unknown",
+                    kind = "variable"
+                )
+            }
+    }
+
+    override fun collectMethodParameters(
+        method: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val fn = method as? KtNamedFunction ?: return null
+        return fn.valueParameters.mapNotNull { p ->
+            val name = p.name ?: return@mapNotNull null
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = name,
+                type = p.typeReference?.text ?: "Unknown",
+                kind = "variable"
+            )
+        }
+    }
+
+    override fun collectClassMembersAt(
+        element: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val cls = PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java) ?: return null
+        val result = mutableListOf<com.codeintel.mcpserver.models.results.ScopeSymbol>()
+        cls.declarations.forEach { decl ->
+            when (decl) {
+                is KtProperty -> decl.name?.let { n ->
+                    result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                        name = n, type = decl.typeReference?.text ?: "Unknown", kind = "property"))
+                }
+                is KtNamedFunction -> decl.name?.let { n ->
+                    result.add(com.codeintel.mcpserver.models.results.ScopeSymbol(
+                        name = n, type = decl.typeReference?.text ?: "Unit", kind = "method"))
+                }
+            }
+        }
+        return result
+    }
+
+    override fun collectImportedSymbols(
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val kt = file as? KtFile ?: return null
+        return kt.importDirectives.mapNotNull { imp ->
+            val fq = imp.importedFqName ?: return@mapNotNull null
+            com.codeintel.mcpserver.models.results.ScopeSymbol(
+                name = fq.shortName().asString(),
+                type = fq.asString(),
+                kind = "type"
+            )
+        }
+    }
+
+    override fun collectExtensionFunctions(
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ScopeSymbol>? {
+        val kt = file as? KtFile ?: return null
+        return kt.declarations.filterIsInstance<KtNamedFunction>()
+            .filter { it.receiverTypeReference != null }
+            .mapNotNull { f ->
+                val name = f.name ?: return@mapNotNull null
+                com.codeintel.mcpserver.models.results.ScopeSymbol(
+                    name = name,
+                    type = "${f.receiverTypeReference?.text}.() -> ${f.typeReference?.text ?: "Unit"}",
+                    kind = "method"
+                )
+            }
+    }
+
+    override fun setFilePackage(file: PsiFile, targetPackage: String): Boolean {
+        val kt = file as? KtFile ?: return false
+        val packageDirective = kt.packageDirective ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(file.project)
+        val newDirective = factory.createPackageDirective(
+            org.jetbrains.kotlin.name.FqName(targetPackage)
+        )
+        packageDirective.replace(newDirective)
+        return true
+    }
+
+    override fun listMovableDeclarations(file: PsiFile): List<PsiElement>? =
+        (file as? KtFile)?.declarations?.toList()
+
+    override fun changeReturnType(method: PsiElement, newReturnType: String): Boolean {
+        val fn = method as? KtNamedFunction ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(fn.project)
+        val typeRef = fn.typeReference
+        val fragment = factory.createTypeCodeFragment(newReturnType, fn).getContentElement()
+            ?: return false
+        if (typeRef != null) {
+            typeRef.replace(fragment)
+        } else {
+            fn.setTypeReference(fragment as org.jetbrains.kotlin.psi.KtTypeReference)
+        }
+        return true
+    }
+
+    override fun changeParameters(
+        method: PsiElement,
+        parameters: List<com.codeintel.mcpserver.models.args.ParameterChange>
+    ): Boolean {
+        val fn = method as? KtNamedFunction ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(fn.project)
+        val paramList = fn.valueParameterList ?: return false
+        val newParams = parameters.joinToString(", ") { p ->
+            val default = if (p.defaultValue != null) " = ${p.defaultValue}" else ""
+            "${p.name}: ${p.type}$default"
+        }
+        val newFunction = factory.createFunction("fun temp($newParams) {}")
+        paramList.replace(newFunction.valueParameterList!!)
+        return true
+    }
+
+    override fun findContainingClassLike(
+        file: PsiFile,
+        startOffset: Int,
+        endOffset: Int
+    ): PsiElement? {
+        if (file !is KtFile) return null
+        return PsiTreeUtil.findChildrenOfType(file, KtClass::class.java)
+            .firstOrNull { it.textRange.startOffset <= startOffset && it.textRange.endOffset >= endOffset }
+    }
+
+    override fun extractMethodInClass(
+        containingClass: PsiElement,
+        methodName: String,
+        body: String
+    ): Boolean {
+        val cls = containingClass as? KtClass ?: return false
+        val factory = org.jetbrains.kotlin.psi.KtPsiFactory(cls.project)
+        val newMethod = factory.createFunction("private fun $methodName() {\n$body\n}")
+        val classBody = cls.body ?: return false
+        classBody.addBefore(newMethod, classBody.rBrace)
+        classBody.addBefore(factory.createNewLine(), classBody.rBrace)
+        return true
+    }
+
+    override fun extractMethodCallExpression(
+        containingClass: PsiElement,
+        methodName: String
+    ): String? = if (containingClass is KtClass) "$methodName()" else null
+
+    // -------- Data flow (nullability) --------
+
+    override fun analyzeNullabilityFromCursor(
+        project: com.intellij.openapi.project.Project,
+        element: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? {
+        val ktProp = PsiTreeUtil.getParentOfType(element, KtProperty::class.java)
+        if (ktProp != null) return analyzeKotlinPropertyNullability(project, ktProp)
+        val ktParam = PsiTreeUtil.getParentOfType(element, KtParameter::class.java)
+        if (ktParam != null) return analyzeKtParameterNullability(ktParam)
+        return null
+    }
+
+    override fun analyzeNullabilityOfResolved(
+        project: com.intellij.openapi.project.Project,
+        resolved: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? = when (resolved) {
+        is KtProperty -> analyzeKotlinPropertyNullability(project, resolved)
+        is KtParameter -> analyzeKtParameterNullability(resolved)
+        else -> null
+    }
+
+    override fun backwardFlowSteps(
+        project: com.intellij.openapi.project.Project,
+        target: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.FlowStep>? {
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.FlowStep>()
+        when (target) {
+            is KtProperty -> {
+                val initializer = target.initializer ?: return emptyList()
+                val file = target.containingFile?.virtualFile ?: return emptyList()
+                val doc = com.intellij.psi.PsiDocumentManager.getInstance(project)
+                    .getDocument(target.containingFile)
+                val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
+                out.add(com.codeintel.mcpserver.models.results.FlowStep(
+                    file = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(project, file),
+                    line = line,
+                    code = "initializer: ${initializer.text.take(100)}"
+                ))
+            }
+            is KtParameter -> {
+                val fn = PsiTreeUtil.getParentOfType(target, KtNamedFunction::class.java) ?: return emptyList()
+                val callers = com.intellij.psi.search.searches.ReferencesSearch
+                    .search(fn).findAll().take(10)
+                for (caller in callers) {
+                    val callerFile = caller.element.containingFile?.virtualFile ?: continue
+                    val callerDoc = com.intellij.psi.PsiDocumentManager.getInstance(project)
+                        .getDocument(caller.element.containingFile) ?: continue
+                    val callerLine = callerDoc.getLineNumber(caller.element.textOffset) + 1
+                    val lineStart = callerDoc.getLineStartOffset(callerLine - 1)
+                    val lineEnd = callerDoc.getLineEndOffset(callerLine - 1)
+                    val lineText = callerDoc.text.substring(lineStart, lineEnd).trim()
+                    out.add(com.codeintel.mcpserver.models.results.FlowStep(
+                        file = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(project, callerFile),
+                        line = callerLine,
+                        code = "caller: ${lineText.take(120)}"
+                    ))
+                }
+            }
+            else -> return null
+        }
+        return out
+    }
+
+    private fun analyzeKtParameterNullability(
+        param: KtParameter
+    ): com.codeintel.mcpserver.models.results.DataFlowResult {
+        val typeText = param.typeReference?.text ?: "Any"
+        val isNullable = typeText.endsWith("?")
+        return com.codeintel.mcpserver.models.results.DataFlowResult(
+            nullability = if (isNullable) "nullable" else "non_null",
+            reason = "Kotlin parameter type: $typeText"
+        )
+    }
+
+    private fun analyzeKotlinPropertyNullability(
+        project: com.intellij.openapi.project.Project,
+        prop: KtProperty
+    ): com.codeintel.mcpserver.models.results.DataFlowResult {
+        val typeText = prop.typeReference?.text
+        val initializer = prop.initializer
+
+        val nullPaths = mutableListOf<String>()
+        val isExplicitlyNullable = typeText?.endsWith("?") == true
+
+        if (initializer?.text == "null") {
+            nullPaths.add("initialized to null at declaration")
+        }
+
+        if (prop.isVar) {
+            val usages = com.intellij.psi.search.searches.ReferencesSearch.search(prop).findAll()
+            for (ref in usages.take(20)) {
+                val parent = ref.element.parent
+                if (parent is KtBinaryExpression &&
+                    parent.operationToken == org.jetbrains.kotlin.lexer.KtTokens.EQ &&
+                    parent.right?.text == "null"
+                ) {
+                    val doc = com.intellij.psi.PsiDocumentManager.getInstance(project)
+                        .getDocument(ref.element.containingFile)
+                    val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
+                    nullPaths.add("assigned null at line $line")
+                }
+            }
+        }
+
+        val delegateText = prop.delegateExpression?.text
+        val isLazy = delegateText?.startsWith("lazy") == true
+        val isLateinit = prop.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.LATEINIT_KEYWORD)
+
+        val nullability = when {
+            isLateinit -> "lateinit (non_null after init, throws before)"
+            isLazy -> "non_null (lazy initialized)"
+            isExplicitlyNullable -> "nullable"
+            typeText != null -> "non_null"
+            initializer != null && initializer.text != "null" -> "non_null (inferred)"
+            else -> "unknown"
+        }
+
+        val inferredType = typeText
+            ?: (if (initializer != null) "inferred from: ${initializer.text.take(50)}" else "unknown")
+
+        return com.codeintel.mcpserver.models.results.DataFlowResult(
+            nullability = nullability,
+            reason = "Kotlin property type: $inferredType, var=${prop.isVar}",
+            nullPaths = nullPaths.ifEmpty { null }
+        )
+    }
+
+    // -------- Quality --------
+
+    override fun findComplexityIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is KtFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (fn in PsiTreeUtil.findChildrenOfType(file, KtNamedFunction::class.java)) {
+            val complexity = computeKotlinComplexity(fn)
+            if (complexity <= 10) continue
+            val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
+            val severity = when {
+                complexity > 30 -> "critical"
+                complexity > 20 -> "high"
+                complexity > 15 -> "medium"
+                else -> "low"
+            }
+            issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                type = "high_complexity",
+                severity = severity,
+                file = relPath,
+                line = line,
+                description = "Function '${fn.name}' has cyclomatic complexity of $complexity",
+                suggestion = "Consider extracting helper methods to reduce complexity",
+                metrics = mapOf(
+                    "cyclomatic_complexity" to complexity.toString(),
+                    "lines" to fn.text.lines().size.toString()
+                )
+            ))
+        }
+        return issues
+    }
+
+    override fun findDeadCodeIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is KtFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        val scope = com.intellij.psi.search.GlobalSearchScope.fileScope(file)
+        for (fn in PsiTreeUtil.findChildrenOfType(file, KtNamedFunction::class.java)) {
+            if (!fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) || fn.name == null) continue
+            val refs = com.intellij.psi.search.searches.ReferencesSearch.search(fn, scope).findAll()
+            if (refs.isNotEmpty()) continue
+            val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
+            issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                type = "unused_function", severity = "medium",
+                file = relPath, line = line,
+                description = "Private function '${fn.name}' appears unused",
+                suggestion = "Remove if no longer needed"
+            ))
+        }
+        for (prop in PsiTreeUtil.findChildrenOfType(file, KtProperty::class.java)) {
+            if (!prop.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) ||
+                prop.name == null ||
+                PsiTreeUtil.getParentOfType(prop, KtClassOrObject::class.java) == null
+            ) continue
+            val refs = com.intellij.psi.search.searches.ReferencesSearch.search(prop, scope).findAll()
+            if (refs.isNotEmpty()) continue
+            val line = doc?.getLineNumber(prop.textOffset)?.plus(1) ?: 0
+            issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                type = "unused_property", severity = "low",
+                file = relPath, line = line,
+                description = "Private property '${prop.name}' appears unused",
+                suggestion = "Remove if no longer needed"
+            ))
+        }
+        return issues
+    }
+
+    override fun collectCloneCandidates(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<CloneCandidate>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<CloneCandidate>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (fn in PsiTreeUtil.findChildrenOfType(file, KtNamedFunction::class.java)) {
+            val body = fn.bodyExpression?.text ?: fn.bodyBlockExpression?.text ?: continue
+            val lines = body.lines().size
+            if (lines < 5) continue
+            val normalized = body.replace(Regex("\\s+"), " ").trim()
+            val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
+            out.add(CloneCandidate(
+                relPath = relPath,
+                line = line,
+                methodName = fn.name ?: "<anon>",
+                paramCount = fn.valueParameters.size,
+                lineCount = lines,
+                bodyHash = normalized.hashCode()
+            ))
+        }
+        return out
+    }
+
+    override fun findPatternIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is KtFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (cls in PsiTreeUtil.findChildrenOfType(file, KtClass::class.java)) {
+            val line = doc?.getLineNumber(cls.textOffset)?.plus(1) ?: 0
+            if (cls.isData()) {
+                val props = cls.primaryConstructorParameters
+                if (props.size > 8) {
+                    issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                        type = "too_many_fields", severity = "medium",
+                        file = relPath, line = line,
+                        description = "Data class '${cls.name}' has ${props.size} properties",
+                        suggestion = "Consider using Builder pattern or grouping related fields"
+                    ))
+                }
+            }
+            val methods = PsiTreeUtil.findChildrenOfType(cls, KtNamedFunction::class.java)
+            if (methods.size > 20) {
+                issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                    type = "god_class", severity = "high",
+                    file = relPath, line = line,
+                    description = "Class '${cls.name}' has ${methods.size} methods (potential God Class)",
+                    suggestion = "Consider splitting into smaller classes with single responsibilities",
+                    metrics = mapOf("method_count" to methods.size.toString())
+                ))
+            }
+        }
+        return issues
+    }
+
+    override fun findErrorHandlingIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is KtFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (tryExpr in PsiTreeUtil.findChildrenOfType(file, org.jetbrains.kotlin.psi.KtTryExpression::class.java)) {
+            for (catchClause in tryExpr.catchClauses) {
+                val catchBody = catchClause.catchBody?.text?.trim() ?: ""
+                val exceptionType = catchClause.catchParameter?.typeReference?.text ?: "Exception"
+                val line = doc?.getLineNumber(catchClause.textOffset)?.plus(1) ?: 0
+                if (catchBody.isEmpty() || catchBody == "{}") {
+                    issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                        type = "empty_catch", severity = "high",
+                        file = relPath, line = line,
+                        description = "Empty catch block for $exceptionType",
+                        suggestion = "Log the exception or handle it properly"
+                    ))
+                }
+                if (exceptionType == "Exception" || exceptionType == "Throwable") {
+                    issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                        type = "broad_catch", severity = "medium",
+                        file = relPath, line = line,
+                        description = "Catching too broad exception type: $exceptionType",
+                        suggestion = "Catch specific exception types"
+                    ))
+                }
+            }
+        }
+        return issues
+    }
+
+    private fun computeKotlinComplexity(fn: KtNamedFunction): Int {
+        var complexity = 1
+        val body = fn.bodyExpression?.text ?: fn.bodyBlockExpression?.text ?: return 1
+        complexity += countOccurrences(body, "\\bif\\b")
+        complexity += countOccurrences(body, "\\belse if\\b")
+        complexity += countOccurrences(body, "\\bfor\\b")
+        complexity += countOccurrences(body, "\\bwhile\\b")
+        complexity += countOccurrences(body, "\\bwhen\\b")
+        complexity += countOccurrences(body, "->") - countOccurrences(body, "\\bwhen\\b")
+        complexity += countOccurrences(body, "\\bcatch\\b")
+        complexity += countOccurrences(body, "&&")
+        complexity += countOccurrences(body, "\\|\\|")
+        complexity += countOccurrences(body, "\\?:")
+        return maxOf(1, complexity)
+    }
+
+    private fun countOccurrences(text: String, pattern: String): Int =
+        try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
+
+    // -------- Project overview --------
+
+    override fun collectClassEntries(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        includeMembers: Boolean
+    ): Map<String, List<com.codeintel.mcpserver.models.results.ClassEntry>>? {
+        if (file !is KtFile) return null
+        val pkg = file.packageFqName.asString().ifEmpty { "<root>" }
+        val entries = file.declarations
+            .filterIsInstance<KtClassOrObject>()
+            .map { buildKotlinClassEntry(it, includeMembers) }
+        return mapOf(pkg to entries)
+    }
+
+    override fun collectKeyClassCandidates(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        moduleName: String
+    ): List<com.codeintel.mcpserver.models.results.KeyClassInfo>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.KeyClassInfo>()
+        for (decl in file.declarations.filterIsInstance<KtClassOrObject>()) {
+            val name = decl.fqName?.asString() ?: continue
+            val refCount = try {
+                com.intellij.psi.search.searches.ReferencesSearch.search(decl, scope).findAll().size
+            } catch (_: Exception) { 0 }
+            if (refCount < 3) continue
+            val role = when {
+                decl.annotationEntries.any { it.shortName?.asString() == "HiltAndroidApp" } -> "application"
+                decl.annotationEntries.any { it.shortName?.asString() == "AndroidEntryPoint" } -> "entry_point"
+                decl.annotationEntries.any { it.shortName?.asString() == "HiltViewModel" } -> "viewmodel"
+                name.contains("Repository") -> "repository"
+                name.contains("UseCase") -> "use_case"
+                else -> "hub"
+            }
+            out.add(com.codeintel.mcpserver.models.results.KeyClassInfo(
+                name = name,
+                module = moduleName,
+                role = role,
+                references = refCount
+            ))
+        }
+        return out
+    }
+
+    override fun collectApiClasses(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.ApiClass>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.ApiClass>()
+        for (decl in file.declarations) {
+            if (decl !is KtClassOrObject) continue
+            if (decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD)) continue
+            val methods = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+                .filter { !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
+                .map { fn ->
+                    val params = fn.valueParameters.joinToString(", ") {
+                        "${it.name ?: "_"}: ${it.typeReference?.text ?: "Any"}"
+                    }
+                    com.codeintel.mcpserver.models.results.ApiMethod(
+                        name = fn.name ?: "<anonymous>",
+                        signature = "fun ${fn.name}($params): ${fn.typeReference?.text ?: "Unit"}",
+                        visibility = if (fn.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD))
+                            "internal" else "public"
+                    )
+                }
+            out.add(com.codeintel.mcpserver.models.results.ApiClass(
+                name = decl.fqName?.asString() ?: decl.name ?: "<anonymous>",
+                kind = when (decl) {
+                    is KtClass -> when {
+                        decl.isInterface() -> "interface"
+                        decl.isEnum() -> "enum"
+                        else -> "class"
+                    }
+                    is org.jetbrains.kotlin.psi.KtObjectDeclaration -> "object"
+                    else -> "class"
+                },
+                methods = methods
+            ))
+        }
+        return out
+    }
+
+    override fun findClassByFqName(
+        project: com.intellij.openapi.project.Project,
+        scope: com.intellij.psi.search.GlobalSearchScope,
+        fqName: String
+    ): PsiElement? {
+        val simple = fqName.substringAfterLast(".")
+        for (vf in com.intellij.psi.search.FilenameIndex.getAllFilesByExt(project, "kt", scope)) {
+            val pf = com.intellij.psi.PsiManager.getInstance(project).findFile(vf) as? KtFile ?: continue
+            val found = PsiTreeUtil.findChildrenOfType(pf, KtClass::class.java)
+                .firstOrNull { it.fqName?.asString() == fqName || it.name == simple }
+            if (found != null) return found
+        }
+        return null
+    }
+
+    override fun getEnclosingClassLike(element: PsiElement): PsiElement? =
+        PsiTreeUtil.getParentOfType(element, KtClassOrObject::class.java)
+
+    private fun buildKotlinClassEntry(
+        decl: KtClassOrObject,
+        includeMembers: Boolean
+    ): com.codeintel.mcpserver.models.results.ClassEntry {
+        val supers = decl.superTypeListEntries.map { it.text.substringBefore("(").trim() }
+        val annos = decl.annotationEntries.map { "@${it.shortName?.asString() ?: ""}" }
+        val visibility = when {
+            decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) -> "private"
+            decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.INTERNAL_KEYWORD) -> "internal"
+            else -> "public"
+        }
+        val kind = when (decl) {
+            is KtClass -> when {
+                decl.isInterface() -> "interface"
+                decl.isEnum() -> "enum"
+                decl.isData() -> "data class"
+                decl.isSealed() -> "sealed class"
+                else -> "class"
+            }
+            is org.jetbrains.kotlin.psi.KtObjectDeclaration -> "object"
+            else -> "class"
+        }
+        val members = if (includeMembers) {
+            val fns = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+                .filter { !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD) }
+                .map { fn ->
+                    val params = fn.valueParameters.joinToString(", ") {
+                        "${it.name}: ${it.typeReference?.text ?: "Any"}"
+                    }
+                    val ret = fn.typeReference?.text?.let { ": $it" } ?: ""
+                    "${fn.name}($params)$ret"
+                }
+            val props = PsiTreeUtil.findChildrenOfType(decl, KtProperty::class.java)
+                .filter {
+                    it.parent == decl.body &&
+                        !it.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PRIVATE_KEYWORD)
+                }
+                .map { "${it.name}: ${it.typeReference?.text ?: "?"}" }
+            props + fns
+        } else null
+        return com.codeintel.mcpserver.models.results.ClassEntry(
+            name = decl.name ?: "<anonymous>",
+            kind = kind,
+            visibility = visibility,
+            superTypes = supers.ifEmpty { null },
+            annotations = annos.ifEmpty { null },
+            members = members?.ifEmpty { null }
+        )
+    }
+
+    // -------- Framework refinement hooks --------
+
+    override fun refineRoomEntity(
+        cls: PsiClass
+    ): Pair<List<com.codeintel.mcpserver.models.results.EntityField>, List<String>>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val fields = mutableListOf<com.codeintel.mcpserver.models.results.EntityField>()
+        val primaryKeys = mutableListOf<String>()
+        for (param in ktClass.primaryConstructorParameters) {
+            val typeName = param.typeReference?.text ?: "Any"
+            fields.add(com.codeintel.mcpserver.models.results.EntityField(
+                name = param.name ?: "",
+                type = typeName,
+                nullable = typeName.endsWith("?")
+            ))
+            if (param.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
+                primaryKeys.add(param.name ?: "")
+            }
+        }
+        for (prop in ktClass.getProperties()) {
+            if (prop.annotationEntries.any { it.shortName?.asString() == "PrimaryKey" }) {
+                primaryKeys.add(prop.name ?: "")
+            }
+        }
+        return fields to primaryKeys.distinct()
+    }
+
+    override fun refineRoomDaoMethods(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.DaoMethod>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.DaoMethod>()
+        for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
+            val ann = fn.annotationEntries
+            val queryAnn = ann.firstOrNull { it.shortName?.asString() == "Query" }
+            val insertAnn = ann.firstOrNull { it.shortName?.asString() == "Insert" }
+            val updateAnn = ann.firstOrNull { it.shortName?.asString() == "Update" }
+            val deleteAnn = ann.firstOrNull { it.shortName?.asString() == "Delete" }
+            val (sql, annName) = when {
+                queryAnn != null -> {
+                    val sqlText = queryAnn.valueArguments.firstOrNull()
+                        ?.getArgumentExpression()?.text?.removeSurrounding("\"") ?: ""
+                    sqlText to "@Query"
+                }
+                insertAnn != null -> null to "@Insert"
+                updateAnn != null -> null to "@Update"
+                deleteAnn != null -> null to "@Delete"
+                else -> continue
+            }
+            out.add(com.codeintel.mcpserver.models.results.DaoMethod(
+                name = fn.name ?: "",
+                sql = sql,
+                returnType = fn.typeReference?.text ?: "Unit",
+                annotation = annName
+            ))
+        }
+        return out
+    }
+
+    override fun refineHiltProvides(
+        cls: PsiClass
+    ): List<com.codeintel.mcpserver.models.results.HiltProvides>? {
+        val ktClass = cls.navigationElement as? KtClass ?: return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.HiltProvides>()
+        for (fn in PsiTreeUtil.findChildrenOfType(ktClass, KtNamedFunction::class.java)) {
+            val hasProvides = fn.annotationEntries.any { it.shortName?.asString() == "Provides" }
+            val hasBinds = fn.annotationEntries.any { it.shortName?.asString() == "Binds" }
+            if (!hasProvides && !hasBinds) continue
+            out.add(com.codeintel.mcpserver.models.results.HiltProvides(
+                methodName = fn.name ?: "",
+                returnType = fn.typeReference?.text ?: "Unit",
+                scope = null
+            ))
+        }
+        return out
+    }
+
+    override fun collectRetrofitInterfaces(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.RetrofitInterface>? {
+        if (file !is KtFile) return null
+        val out = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitInterface>()
+        val httpMethods = listOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+        for (decl in file.declarations) {
+            if (decl !is KtClass || !decl.isInterface()) continue
+            val fns = PsiTreeUtil.findChildrenOfType(decl, KtNamedFunction::class.java)
+            val hasRetrofit = fns.any { fn ->
+                fn.annotationEntries.any {
+                    (it.shortName?.asString() ?: "") in listOf("GET", "POST", "PUT", "DELETE", "PATCH")
+                }
+            }
+            if (!hasRetrofit) continue
+
+            val endpoints = mutableListOf<com.codeintel.mcpserver.models.results.RetrofitEndpoint>()
+            for (fn in fns) {
+                for (httpMethod in httpMethods) {
+                    val ann = fn.annotationEntries.firstOrNull {
+                        it.shortName?.asString() == httpMethod
+                    } ?: continue
+                    val path = ann.valueArguments.firstOrNull()
+                        ?.getArgumentExpression()?.text?.removeSurrounding("\"") ?: ""
+                    val params = fn.valueParameters.map { p ->
+                        val paramAnn = p.annotationEntries.firstOrNull()?.shortName?.asString() ?: "Body"
+                        com.codeintel.mcpserver.models.results.EndpointParam(
+                            name = p.name ?: "",
+                            type = p.typeReference?.text ?: "Any",
+                            annotation = "@$paramAnn"
+                        )
+                    }
+                    endpoints.add(com.codeintel.mcpserver.models.results.RetrofitEndpoint(
+                        method = fn.name ?: "",
+                        path = path,
+                        httpMethod = httpMethod,
+                        returnType = fn.typeReference?.text ?: "Unit",
+                        parameters = params
+                    ))
+                }
+            }
+            out.add(com.codeintel.mcpserver.models.results.RetrofitInterface(
+                name = decl.fqName?.asString() ?: decl.name ?: "",
+                baseUrl = null,
+                endpoints = endpoints
+            ))
+        }
+        return out
+    }
+
+    override fun collectComposeInfo(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): com.codeintel.mcpserver.lang.ComposeFileInfo? {
+        if (file !is KtFile) return null
+        val composables = mutableListOf<com.codeintel.mcpserver.models.results.ComposableInfo>()
+        val themes = mutableListOf<com.codeintel.mcpserver.models.results.ThemeInfo>()
+        val stateHolders = mutableListOf<com.codeintel.mcpserver.models.results.StateHolderInfo>()
+        val relPath = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(
+            project, file.virtualFile ?: return null
+        )
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+
+        for (fn in PsiTreeUtil.findChildrenOfType(file, KtNamedFunction::class.java)) {
+            val isComposable = fn.annotationEntries.any { it.shortName?.asString() == "Composable" }
+            if (!isComposable) continue
+            val isPreview = fn.annotationEntries.any { it.shortName?.asString() == "Preview" }
+            val params = fn.valueParameters.map {
+                "${it.name ?: "_"}: ${it.typeReference?.text ?: "Any"}"
+            }
+            val line = doc?.getLineNumber(fn.textOffset)?.plus(1) ?: 0
+            val name = fn.name ?: "<anonymous>"
+            composables.add(com.codeintel.mcpserver.models.results.ComposableInfo(
+                name = name, file = relPath, line = line,
+                parameters = params, preview = isPreview
+            ))
+            if (name.contains("Theme", ignoreCase = true)) {
+                themes.add(com.codeintel.mcpserver.models.results.ThemeInfo(
+                    name = name, file = relPath, colorScheme = null
+                ))
+            }
+        }
+        for (cls in PsiTreeUtil.findChildrenOfType(file, KtClass::class.java)) {
+            val hasStateProps = cls.getProperties().any { prop ->
+                val typeText = prop.typeReference?.text ?: ""
+                typeText.contains("MutableState") || typeText.contains("StateFlow") ||
+                    typeText.contains("MutableStateFlow")
+            }
+            if (hasStateProps) {
+                stateHolders.add(com.codeintel.mcpserver.models.results.StateHolderInfo(
+                    name = cls.name ?: "",
+                    stateType = "ViewModel/StateHolder",
+                    file = relPath
+                ))
+            }
+        }
+        return com.codeintel.mcpserver.lang.ComposeFileInfo(composables, themes, stateHolders)
+    }
+
+    override fun collectNavComposableRoutes(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile
+    ): List<com.codeintel.mcpserver.models.results.NavDestination>? {
+        if (file !is KtFile) return null
+        val text = file.text
+        if (!(text.contains("NavHost") || text.contains("composable("))) return emptyList()
+        val relPath = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(
+            project, file.virtualFile ?: return emptyList()
+        )
+        val regex = Regex("""composable\s*\(\s*(?:route\s*=\s*)?["']([^"']+)["']""")
+        return regex.findAll(text).map { match ->
+            com.codeintel.mcpserver.models.results.NavDestination(
+                id = match.groupValues[1],
+                className = null,
+                arguments = emptyList(),
+                graphId = relPath
+            )
+        }.toList()
+    }
+
+    override fun runBatchFixInspection(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        inspectionId: String,
+        dryRun: Boolean
+    ): com.codeintel.mcpserver.lang.BatchFixOutcome? {
+        if (file !is KtFile) return null
+        var problemsFound = 0
+        var problemsFixed = 0
+        val failures = mutableListOf<String>()
+        when (inspectionId) {
+            "UnusedImport", "unused-import" -> {
+                for (importDir in file.importDirectives) {
+                    val importedFqn = importDir.importedFqName?.asString() ?: continue
+                    val simpleName = importedFqn.substringAfterLast(".")
+                    val isUsed = file.declarations.any { it.text.contains(simpleName) }
+                    if (!isUsed) {
+                        problemsFound++
+                        if (!dryRun) {
+                            try {
+                                com.intellij.openapi.command.WriteCommandAction
+                                    .runWriteCommandAction(project) { importDir.delete() }
+                                problemsFixed++
+                            } catch (e: Exception) {
+                                failures.add("Failed to remove import: ${e.message}")
+                            }
+                        }
+                    }
+                }
+            }
+            "RedundantVisibilityModifier", "redundant-visibility" -> {
+                for (decl in PsiTreeUtil.findChildrenOfType(
+                    file, org.jetbrains.kotlin.psi.KtDeclaration::class.java
+                )) {
+                    if (decl.hasModifier(org.jetbrains.kotlin.lexer.KtTokens.PUBLIC_KEYWORD) &&
+                        decl.parent is org.jetbrains.kotlin.psi.KtClassBody) {
+                        problemsFound++
+                    }
+                }
+            }
+            "ExplicitThis", "explicit-this" -> {
+                for (expr in PsiTreeUtil.findChildrenOfType(
+                    file, org.jetbrains.kotlin.psi.KtThisExpression::class.java
+                )) {
+                    if (expr.parent is org.jetbrains.kotlin.psi.KtDotQualifiedExpression) {
+                        problemsFound++
+                    }
+                }
+            }
+            else -> return com.codeintel.mcpserver.lang.BatchFixOutcome(supported = false)
+        }
+        return com.codeintel.mcpserver.lang.BatchFixOutcome(
+            supported = true,
+            problemsFound = problemsFound,
+            problemsFixed = problemsFixed,
+            failures = failures
+        )
+    }
+}

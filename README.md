@@ -4,9 +4,9 @@
 
 > **[中文文档](README_zh.md)**
 
-An IntelliJ Platform plugin that exposes **12 IDE-level code intelligence tools** to AI agents via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). Works with **Android Studio**, **IntelliJ IDEA**, and other JetBrains IDEs.
+An IntelliJ Platform plugin that exposes **13 IDE-level code intelligence tools** to AI agents via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). Works with **Android Studio**, **IntelliJ IDEA**, and other JetBrains IDEs.
 
-Instead of letting AI agents fumble through `grep` and file reads, give them direct access to the same semantic understanding that your IDE uses internally — type resolution, reference graphs, call hierarchies, data flow analysis, and safe refactoring.
+Instead of letting AI agents fumble through `grep` and file reads, give them direct access to the same semantic understanding that your IDE uses internally — type resolution, reference graphs, call hierarchies, data flow analysis, and safe refactoring. Every tool response now carries a `nextAction` hint so agents chain calls automatically.
 
 ---
 
@@ -14,8 +14,8 @@ Instead of letting AI agents fumble through `grep` and file reads, give them dir
 
 | Task | Without MCP | With MCP |
 |------|-------------|----------|
-| "Where is UserRepository?" | `grep` → noisy text matches | `resolve_symbol(name="UserRepository")` → exact declaration with file+line+column |
-| "What type is this?" | Read entire file, guess from context | `resolve_symbol` → exact qualified type in 50 tokens |
+| "Where is UserRepository?" | `grep` → noisy text matches | `find_symbol(name="UserRepository")` → exact declaration with file+line+column |
+| "What type is this?" | Read entire file, guess from context | `resolve_symbol(file, line, col)` → exact qualified type in 50 tokens |
 | "Who calls this method?" | `grep` → noisy text matches with false positives | `find_references(qualified_name="com.Foo.bar", mode="CALLERS")` → semantic call chain, no position needed |
 | "Is this nullable?" | Impossible via CLI | `analyze_data_flow(NULLABILITY)` → PSI-level inference |
 | "Rename safely" | `sed` → misses XML/Manifest references | `refactor(RENAME)` → updates all references across languages |
@@ -36,11 +36,12 @@ Evaluated on one 159-class Android project (Room + Hilt + Compose):
 
 ---
 
-## 12 Tools at a Glance
+## 13 Tools at a Glance
 
 | Tool | What It Does |
 |------|-------------|
-| `resolve_symbol` | Resolve symbol by position (file+line+column) or by name — returns type, kind, qualified name, and declaration location |
+| `resolve_symbol` | Resolve symbol at a code position (file+line+column) — returns type, kind, qualified name, declaration |
+| `find_symbol` | Locate a symbol by simple or fully-qualified name — replaces `grep` for symbol lookup |
 | `find_references` | Semantic usages, callers, callees, type hierarchy — by position or by qualified name |
 | `get_scope` | All visible symbols at a given position |
 | `query_project` | Project overview, dependency impact, API surface, build variants |
@@ -52,6 +53,8 @@ Evaluated on one 159-class Android project (Room + Hilt + Compose):
 | `refactor` | Rename, move, extract, safe delete, change signature |
 | `checkpoint` | Create / list / rollback IDE local history snapshots |
 | `sandbox` | Decompile library classes, Java-to-Kotlin, batch inspections |
+
+> **v2.0 Breaking change:** `resolve_symbol` is now position-only. Migrate name-based lookups to the new `find_symbol` tool.
 
 ---
 
@@ -108,7 +111,7 @@ Or use the **"Configure Cursor"** button in the plugin's Tool Window (`MCP Code 
 │            (MCP Streamable HTTP Transport)           │
 ├─────────────────────────────────────────────────────┤
 │                  ToolRegistrar                       │
-│         12 tools × ToolMetricsService                │
+│         13 tools × ToolMetricsService                │
 ├──────────┬──────────┬──────────┬────────────────────┤
 │ Symbol   │Reference │ Project  │ Quality / Rules /   │
 │ Resolver │ Searcher │ Analyzer │ DataFlow / SSR /    │

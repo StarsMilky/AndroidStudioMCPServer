@@ -7,6 +7,7 @@ data class SearchMatchResult(
     val matches: List<com.codeintel.mcpserver.models.results.SearchMatch>,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

@@ -8,6 +8,7 @@ data class RuleCheckResult(
     val violations: List<com.codeintel.mcpserver.models.results.RuleViolation>,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

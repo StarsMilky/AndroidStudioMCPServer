@@ -10,6 +10,7 @@ data class CheckpointResult(
     val diff: String? = null,
     val restoredFiles: Int? = null,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable
