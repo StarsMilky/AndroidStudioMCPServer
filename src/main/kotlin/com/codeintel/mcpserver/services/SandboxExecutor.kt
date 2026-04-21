@@ -231,8 +231,8 @@ object SandboxExecutor {
 
         val inspectionIds = args.inspectionIds ?: listOf("UnusedImport")
         val adapters = com.codeintel.mcpserver.lang.LanguageAdapter.all(project)
-        val extensions = (adapters.flatMap { it.fileExtensions() } +
-            listOf("kt", "kts", "java")).toSet()
+        val extensions = adapters.flatMap { it.fileExtensions() }.toSet()
+            .ifEmpty { setOf("kt", "java") }
 
         return PsiUtils.smartReadAction(project) {
             val scope = GlobalSearchScope.projectScope(project)
