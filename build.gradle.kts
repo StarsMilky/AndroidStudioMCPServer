@@ -49,7 +49,6 @@ intellijPlatform {
               <li>🆕 Every tool response now carries a <code>nextAction</code> hint to guide AI follow-up calls</li>
               <li>✏️ All tool descriptions rewritten for LLM pickability (explicit "USE THIS INSTEAD OF grep" triggers)</li>
               <li>🏗️ Architectural revamp — decoupled services from Kotlin/Java PSI via <code>LanguageAdapter</code> extension point; services/ directory now zero direct kotlin-PSI references</li>
-              <li>🏗️ Physically split plugin.xml into optional modules (mcp-java.xml / mcp-kotlin.xml) — plugin can now load in PyCharm / GoLand / WebStorm / RubyMine; language adapters activate only when their respective IDE plugin is present</li>
               <li>🔌 New extension points <code>com.codeintel.mcpserver.languageAdapter</code> and <code>com.codeintel.mcpserver.frameworkAdapter</code> for third-party extension</li>
               <li>⚠️ <b>Breaking:</b> <code>resolve_symbol</code> is position-only now; migrate name-based lookups to <code>find_symbol</code></li>
             </ul>
