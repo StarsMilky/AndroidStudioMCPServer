@@ -51,7 +51,8 @@ object FrameworkAnalyzer {
 
     fun analyze(project: Project, args: QueryFrameworkArgs): FrameworkViewResult {
         val result = PsiUtils.smartReadAction(project) {
-            when (args.framework) {
+            val adapter = com.codeintel.mcpserver.framework.FrameworkAdapter.find(args.framework.name)
+            adapter?.scan(project, args.detailTarget) ?: when (args.framework) {
                 FrameworkType.ROOM -> analyzeRoom(project, args.detailTarget)
                 FrameworkType.RETROFIT -> analyzeRetrofit(project, args.detailTarget)
                 FrameworkType.HILT -> analyzeHilt(project, args.detailTarget)
@@ -66,6 +67,12 @@ object FrameworkAnalyzer {
         }
         return result.copy(nextAction = hint)
     }
+
+    internal fun analyzeRoomPublic(project: Project, detailTarget: String?) = analyzeRoom(project, detailTarget)
+    internal fun analyzeRetrofitPublic(project: Project, detailTarget: String?) = analyzeRetrofit(project, detailTarget)
+    internal fun analyzeHiltPublic(project: Project, detailTarget: String?) = analyzeHilt(project, detailTarget)
+    internal fun analyzeComposePublic(project: Project, detailTarget: String?) = analyzeCompose(project, detailTarget)
+    internal fun analyzeNavigationPublic(project: Project, detailTarget: String?) = analyzeNavigation(project, detailTarget)
 
     // ==================== ROOM ====================
 

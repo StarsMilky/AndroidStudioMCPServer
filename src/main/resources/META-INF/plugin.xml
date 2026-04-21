@@ -69,6 +69,15 @@ data flow analysis, and safe cross-language refactoring. Every response includes
     <depends>org.jetbrains.kotlin</depends>
     <depends>com.intellij.modules.json</depends>
 
+    <extensionPoints>
+        <extensionPoint name="languageAdapter"
+                        interface="com.codeintel.mcpserver.lang.LanguageAdapter"
+                        dynamic="true"/>
+        <extensionPoint name="frameworkAdapter"
+                        interface="com.codeintel.mcpserver.framework.FrameworkAdapter"
+                        dynamic="true"/>
+    </extensionPoints>
+
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity
             implementation="com.codeintel.mcpserver.server.McpServerStartupActivity"/>
@@ -79,6 +88,16 @@ data flow analysis, and safe cross-language refactoring. Every response includes
                     factoryClass="com.codeintel.mcpserver.server.McpToolWindowFactory"/>
         <notificationGroup id="MCP Code Intelligence"
                            displayType="BALLOON"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.codeintel.mcpserver">
+        <languageAdapter implementation="com.codeintel.mcpserver.lang.JavaLanguageAdapter"/>
+        <languageAdapter implementation="com.codeintel.mcpserver.lang.KotlinLanguageAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.RoomFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.RetrofitFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.HiltFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.ComposeFrameworkAdapter"/>
+        <frameworkAdapter implementation="com.codeintel.mcpserver.framework.NavigationFrameworkAdapter"/>
     </extensions>
 
     <extensions defaultExtensionNs="org.jetbrains.kotlin">
