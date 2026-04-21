@@ -200,6 +200,10 @@ class McpServerManager : Disposable {
                 "Resolve symbol at any code position"
             ),
             _root_ide_package_.com.codeintel.mcpserver.server.ToolInfo(
+                "find_symbol",
+                "Locate a symbol by simple name or fully-qualified name"
+            ),
+            _root_ide_package_.com.codeintel.mcpserver.server.ToolInfo(
                 "find_references",
                 "Semantic reference search with call/type hierarchy"
             ),
