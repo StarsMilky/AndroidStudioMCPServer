@@ -70,10 +70,10 @@ data flow analysis, and safe cross-language refactoring. Every response includes
     <depends optional="true" config-file="mcp-kotlin.xml">org.jetbrains.kotlin</depends>
 
     <extensionPoints>
-        <extensionPoint name="languageAdapter"
+        <extensionPoint qualifiedName="com.codeintel.mcpserver.languageAdapter"
                         interface="com.codeintel.mcpserver.lang.LanguageAdapter"
                         dynamic="true"/>
-        <extensionPoint name="frameworkAdapter"
+        <extensionPoint qualifiedName="com.codeintel.mcpserver.frameworkAdapter"
                         interface="com.codeintel.mcpserver.framework.FrameworkAdapter"
                         dynamic="true"/>
     </extensionPoints>
