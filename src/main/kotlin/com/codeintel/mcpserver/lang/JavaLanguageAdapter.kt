@@ -254,4 +254,267 @@ class JavaLanguageAdapter : LanguageAdapter {
         containingClass: PsiElement,
         methodName: String
     ): String? = if (containingClass is PsiClass) "$methodName();" else null
+
+    // -------- Data flow (nullability) --------
+
+    override fun analyzeNullabilityFromCursor(
+        project: com.intellij.openapi.project.Project,
+        element: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? {
+        val javaVar = element.parent as? PsiVariable ?: return null
+        return analyzeJavaNullability(project, javaVar)
+    }
+
+    override fun analyzeNullabilityOfResolved(
+        project: com.intellij.openapi.project.Project,
+        resolved: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? {
+        if (resolved !is PsiVariable) return null
+        return analyzeJavaNullability(project, resolved)
+    }
+
+    override fun backwardFlowSteps(
+        project: com.intellij.openapi.project.Project,
+        target: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.FlowStep>? {
+        if (target !is PsiVariable) return null
+        val initializer = target.initializer ?: return emptyList()
+        val file = target.containingFile?.virtualFile ?: return emptyList()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project)
+            .getDocument(target.containingFile)
+        val line = doc?.getLineNumber(initializer.textOffset)?.plus(1) ?: 0
+        return listOf(
+            com.codeintel.mcpserver.models.results.FlowStep(
+                file = com.codeintel.mcpserver.util.ProjectUtils.toRelativePath(project, file),
+                line = line,
+                code = "initializer: ${initializer.text.take(100)}"
+            )
+        )
+    }
+
+    private fun analyzeJavaNullability(
+        project: com.intellij.openapi.project.Project,
+        variable: PsiVariable
+    ): com.codeintel.mcpserver.models.results.DataFlowResult {
+        val type = variable.type
+        val annotations = variable.annotations
+        val hasNullable = annotations.any { it.qualifiedName?.contains("Nullable") == true }
+        val hasNonNull = annotations.any {
+            val fqn = it.qualifiedName ?: ""
+            fqn.contains("NonNull") || fqn.contains("NotNull") || fqn.contains("Nonnull")
+        }
+
+        val nullPaths = mutableListOf<String>()
+        val initializer = variable.initializer
+        if (initializer != null && initializer.text == "null") {
+            nullPaths.add("initialized to null at declaration")
+        }
+
+        val usages = com.intellij.psi.search.searches.ReferencesSearch.search(variable).findAll()
+        for (ref in usages.take(20)) {
+            val assignExpr = PsiTreeUtil.getParentOfType(ref.element, PsiAssignmentExpression::class.java)
+            if (assignExpr != null && assignExpr.rExpression?.text == "null") {
+                val doc = com.intellij.psi.PsiDocumentManager.getInstance(project)
+                    .getDocument(ref.element.containingFile)
+                val line = doc?.getLineNumber(ref.element.textOffset)?.plus(1) ?: 0
+                nullPaths.add("assigned null at line $line")
+            }
+        }
+
+        val nullability = when {
+            hasNonNull -> "non_null"
+            hasNullable -> "nullable"
+            type.canonicalText.endsWith("?") -> "nullable"
+            nullPaths.isNotEmpty() -> "possibly_null"
+            type is com.intellij.psi.PsiPrimitiveType -> "non_null"
+            else -> "platform_type"
+        }
+
+        return com.codeintel.mcpserver.models.results.DataFlowResult(
+            nullability = nullability,
+            reason = "Java type: ${type.canonicalText}, annotations: " +
+                annotations.map { it.qualifiedName },
+            nullPaths = nullPaths.ifEmpty { null }
+        )
+    }
+
+    // -------- Quality --------
+
+    override fun findComplexityIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is PsiJavaFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (method in PsiTreeUtil.findChildrenOfType(file, PsiMethod::class.java)) {
+            val complexity = computeJavaComplexity(method)
+            if (complexity <= 10) continue
+            val line = doc?.getLineNumber(method.textOffset)?.plus(1) ?: 0
+            val severity = when {
+                complexity > 30 -> "critical"
+                complexity > 20 -> "high"
+                complexity > 15 -> "medium"
+                else -> "low"
+            }
+            issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                type = "high_complexity",
+                severity = severity,
+                file = relPath,
+                line = line,
+                description = "Method '${method.name}' has cyclomatic complexity of $complexity",
+                suggestion = "Consider refactoring into smaller methods",
+                metrics = mapOf("cyclomatic_complexity" to complexity.toString())
+            ))
+        }
+        return issues
+    }
+
+    override fun findDeadCodeIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is PsiJavaFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        val scope = com.intellij.psi.search.GlobalSearchScope.fileScope(file)
+        for (cls in file.classes) {
+            for (method in cls.methods) {
+                if (!method.hasModifierProperty(com.intellij.psi.PsiModifier.PRIVATE)) continue
+                val refs = com.intellij.psi.search.searches.ReferencesSearch.search(method, scope).findAll()
+                if (refs.isNotEmpty()) continue
+                val line = doc?.getLineNumber(method.textOffset)?.plus(1) ?: 0
+                issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                    type = "unused_method",
+                    severity = "medium",
+                    file = relPath,
+                    line = line,
+                    description = "Private method '${method.name}' appears unused",
+                    suggestion = "Remove if no longer needed"
+                ))
+            }
+            for (field in cls.fields) {
+                if (!field.hasModifierProperty(com.intellij.psi.PsiModifier.PRIVATE)) continue
+                val refs = com.intellij.psi.search.searches.ReferencesSearch.search(field, scope).findAll()
+                if (refs.isNotEmpty()) continue
+                val line = doc?.getLineNumber(field.textOffset)?.plus(1) ?: 0
+                issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                    type = "unused_field",
+                    severity = "low",
+                    file = relPath,
+                    line = line,
+                    description = "Private field '${field.name}' appears unused",
+                    suggestion = "Remove if no longer needed"
+                ))
+            }
+        }
+        return issues
+    }
+
+    override fun collectCloneCandidates(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<CloneCandidate>? {
+        if (file !is PsiJavaFile) return null
+        val out = mutableListOf<CloneCandidate>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (method in PsiTreeUtil.findChildrenOfType(file, PsiMethod::class.java)) {
+            val body = method.body?.text ?: continue
+            val lines = body.lines().size
+            if (lines < 5) continue
+            val normalized = body.replace(Regex("\\s+"), " ").trim()
+            val line = doc?.getLineNumber(method.textOffset)?.plus(1) ?: 0
+            out.add(CloneCandidate(
+                relPath = relPath,
+                line = line,
+                methodName = method.name,
+                paramCount = method.parameterList.parametersCount,
+                lineCount = lines,
+                bodyHash = normalized.hashCode()
+            ))
+        }
+        return out
+    }
+
+    override fun findPatternIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is PsiJavaFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (cls in file.classes) {
+            val line = doc?.getLineNumber(cls.textOffset)?.plus(1) ?: 0
+            if (cls.methods.size > 20) {
+                issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                    type = "god_class",
+                    severity = "high",
+                    file = relPath,
+                    line = line,
+                    description = "Class '${cls.name}' has ${cls.methods.size} methods (potential God Class)",
+                    suggestion = "Consider splitting into smaller classes",
+                    metrics = mapOf("method_count" to cls.methods.size.toString())
+                ))
+            }
+        }
+        return issues
+    }
+
+    override fun findErrorHandlingIssues(
+        project: com.intellij.openapi.project.Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? {
+        if (file !is PsiJavaFile) return null
+        val issues = mutableListOf<com.codeintel.mcpserver.models.results.QualityIssue>()
+        val doc = com.intellij.psi.PsiDocumentManager.getInstance(project).getDocument(file)
+        for (tryStmt in PsiTreeUtil.findChildrenOfType(file, com.intellij.psi.PsiTryStatement::class.java)) {
+            for (catchSection in tryStmt.catchSections) {
+                val catchBody = catchSection.catchBlock?.text?.trim() ?: ""
+                val catchType = catchSection.catchType?.canonicalText ?: "Exception"
+                val line = doc?.getLineNumber(catchSection.textOffset)?.plus(1) ?: 0
+                if (catchBody == "{}" || catchBody.isEmpty()) {
+                    issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                        type = "empty_catch", severity = "high",
+                        file = relPath, line = line,
+                        description = "Empty catch block for $catchType",
+                        suggestion = "Log the exception or handle it properly"
+                    ))
+                }
+                if (catchType == "java.lang.Exception" || catchType == "Exception" ||
+                    catchType == "java.lang.Throwable" || catchType == "Throwable") {
+                    issues.add(com.codeintel.mcpserver.models.results.QualityIssue(
+                        type = "broad_catch", severity = "medium",
+                        file = relPath, line = line,
+                        description = "Catching too broad exception type: $catchType",
+                        suggestion = "Catch specific exception types"
+                    ))
+                }
+            }
+        }
+        return issues
+    }
+
+    private fun computeJavaComplexity(method: PsiMethod): Int {
+        var complexity = 1
+        val body = method.body?.text ?: return 1
+        complexity += countOccurrences(body, "\\bif\\b")
+        complexity += countOccurrences(body, "\\belse if\\b")
+        complexity += countOccurrences(body, "\\bfor\\b")
+        complexity += countOccurrences(body, "\\bwhile\\b")
+        complexity += countOccurrences(body, "\\bswitch\\b")
+        complexity += countOccurrences(body, "\\bcase\\b")
+        complexity += countOccurrences(body, "\\bcatch\\b")
+        complexity += countOccurrences(body, "&&")
+        complexity += countOccurrences(body, "\\|\\|")
+        complexity += countOccurrences(body, "\\?")
+        return maxOf(1, complexity)
+    }
+
+    private fun countOccurrences(text: String, pattern: String): Int =
+        try { Regex(pattern).findAll(text).count() } catch (_: Exception) { 0 }
 }

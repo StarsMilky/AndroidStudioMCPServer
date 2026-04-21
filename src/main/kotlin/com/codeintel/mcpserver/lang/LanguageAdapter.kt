@@ -227,6 +227,72 @@ interface LanguageAdapter {
      */
     fun extractMethodCallExpression(containingClass: PsiElement, methodName: String): String? = null
 
+    // -------- Data flow (nullability) --------
+
+    /**
+     * If [element] lies inside a variable/parameter/property declaration owned
+     * by this adapter, return its nullability analysis. Return null if not owned.
+     */
+    fun analyzeNullabilityFromCursor(
+        project: Project,
+        element: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? = null
+
+    /**
+     * If [resolved] is a variable/property/parameter owned by this adapter,
+     * return its nullability analysis. Null if not owned.
+     */
+    fun analyzeNullabilityOfResolved(
+        project: Project,
+        resolved: PsiElement
+    ): com.codeintel.mcpserver.models.results.DataFlowResult? = null
+
+    /**
+     * Return backward-data-flow source steps for [target] (initializer, callers)
+     * if [target] is owned by this adapter. Null otherwise.
+     */
+    fun backwardFlowSteps(
+        project: Project,
+        target: PsiElement
+    ): List<com.codeintel.mcpserver.models.results.FlowStep>? = null
+
+    // -------- Quality (per-language per-file analyses) --------
+
+    /** Complexity issues for methods in [file]; null if file not owned. */
+    fun findComplexityIssues(
+        project: Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? = null
+
+    /** Dead-code issues (unused private members) for [file]; null if not owned. */
+    fun findDeadCodeIssues(
+        project: Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? = null
+
+    /** Clone candidates (methods with hashed bodies); null if not owned. */
+    fun collectCloneCandidates(
+        project: Project,
+        file: PsiFile,
+        relPath: String
+    ): List<CloneCandidate>? = null
+
+    /** Pattern/anti-pattern issues for [file]; null if not owned. */
+    fun findPatternIssues(
+        project: Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? = null
+
+    /** Error-handling issues (empty/broad catch) for [file]; null if not owned. */
+    fun findErrorHandlingIssues(
+        project: Project,
+        file: PsiFile,
+        relPath: String
+    ): List<com.codeintel.mcpserver.models.results.QualityIssue>? = null
+
     companion object {
         val EP_NAME: ExtensionPointName<LanguageAdapter> =
             ExtensionPointName.create("com.codeintel.mcpserver.languageAdapter")
@@ -251,3 +317,16 @@ interface LanguageAdapter {
         fun all(project: Project): List<LanguageAdapter> = EP_NAME.extensionList
     }
 }
+
+/**
+ * Shared representation of a method body used by [LanguageAdapter.collectCloneCandidates].
+ * The service aggregates candidates from all adapters and reports duplicates.
+ */
+data class CloneCandidate(
+    val relPath: String,
+    val line: Int,
+    val methodName: String,
+    val paramCount: Int,
+    val lineCount: Int,
+    val bodyHash: Int
+)
