@@ -2,6 +2,7 @@ package com.codeintel.mcpserver.services
 
 import com.codeintel.mcpserver.errors.McpErrorCode
 import com.codeintel.mcpserver.errors.ToolException
+import com.codeintel.mcpserver.lang.LanguageAdapter
 import com.codeintel.mcpserver.models.args.FindSymbolArgs
 import com.codeintel.mcpserver.models.args.ResolveSymbolArgs
 import com.codeintel.mcpserver.models.args.SymbolKindFilter
@@ -16,24 +17,12 @@ import com.intellij.psi.PsiClass
 import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiField
-import com.intellij.psi.PsiImportStatement
-import com.intellij.psi.PsiLocalVariable
 import com.intellij.psi.PsiMethod
 import com.intellij.psi.PsiNamedElement
 import com.intellij.psi.PsiPackage
-import com.intellij.psi.PsiPackageStatement
-import com.intellij.psi.PsiParameter
 import com.intellij.psi.PsiReference
-import com.intellij.psi.PsiVariable
 import com.intellij.psi.search.GlobalSearchScope
 import com.intellij.psi.search.PsiShortNamesCache
-import org.jetbrains.kotlin.psi.KtClass
-import org.jetbrains.kotlin.psi.KtImportDirective
-import org.jetbrains.kotlin.psi.KtNamedFunction
-import org.jetbrains.kotlin.psi.KtObjectDeclaration
-import org.jetbrains.kotlin.psi.KtPackageDirective
-import org.jetbrains.kotlin.psi.KtParameter
-import org.jetbrains.kotlin.psi.KtProperty
 
 object SymbolResolver {
 
@@ -221,34 +210,30 @@ object SymbolResolver {
             mapOf("reason" to "Cannot resolve symbol at position")
         )
 
-        val packageDirective = findAncestor(element, PsiPackageStatement::class.java, KtPackageDirective::class.java)
-        if (packageDirective != null) {
-            val packageName = when (packageDirective) {
-                is PsiPackageStatement -> packageDirective.packageName
-                is KtPackageDirective -> packageDirective.fqName.asString()
-                else -> element.text ?: "<unknown>"
-            }
+        // Package declarations: any adapter may claim it
+        val pkgHit = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.findEnclosingPackageDirective(element) }
+        if (pkgHit != null) {
+            val (node, packageName) = pkgHit
             return SymbolInfo(
                 qualifiedType = packageName,
-                declarationFile = element.containingFile?.virtualFile
+                declarationFile = node.containingFile?.virtualFile
                     ?.let { ProjectUtils.toRelativePath(project, it) } ?: "<unknown>",
-                declarationLine = getLineNumber(element),
+                declarationLine = getLineNumber(node),
                 kind = SymbolKind.PACKAGE
             )
         }
 
-        val importDirective = findAncestor(element, PsiImportStatement::class.java, KtImportDirective::class.java)
-        if (importDirective != null) {
-            val importFqn = when (importDirective) {
-                is PsiImportStatement -> importDirective.qualifiedName ?: element.text ?: "<unknown>"
-                is KtImportDirective -> importDirective.importedFqName?.asString() ?: element.text ?: "<unknown>"
-                else -> element.text ?: "<unknown>"
-            }
+        // Import statements: any adapter may claim it
+        val importHit = LanguageAdapter.all(project)
+            .firstNotNullOfOrNull { it.findEnclosingImportDirective(element) }
+        if (importHit != null) {
+            val (node, importFqn) = importHit
             return SymbolInfo(
                 qualifiedType = importFqn,
-                declarationFile = element.containingFile?.virtualFile
+                declarationFile = node.containingFile?.virtualFile
                     ?.let { ProjectUtils.toRelativePath(project, it) } ?: "<unknown>",
-                declarationLine = getLineNumber(element),
+                declarationLine = getLineNumber(node),
                 kind = SymbolKind.CLASS
             )
         }
@@ -265,64 +250,25 @@ object SymbolResolver {
         return null
     }
 
-    private fun resolveQualifiedName(element: PsiElement): String = when (element) {
-        is PsiClass -> element.qualifiedName ?: element.name ?: "<anonymous>"
-        is PsiMethod -> {
-            val containingClass = element.containingClass?.qualifiedName ?: ""
-            "$containingClass.${element.name}"
-        }
-        is PsiField -> {
-            val containingClass = element.containingClass?.qualifiedName ?: ""
-            val type = element.type.canonicalText
-            "$containingClass.${element.name}: $type"
-        }
-        is PsiVariable -> {
-            val type = element.type.canonicalText
-            "${element.name}: $type"
-        }
-        is PsiParameter -> {
-            val type = element.type.canonicalText
-            "${element.name}: $type"
-        }
-        is KtNamedFunction -> {
-            val fqName = element.fqName?.asString()
-            fqName ?: element.name ?: "<anonymous>"
-        }
-        is KtProperty -> {
-            val fqName = element.fqName?.asString()
-            fqName ?: element.name ?: "<anonymous>"
-        }
-        is KtClass -> {
-            val fqName = element.fqName?.asString()
-            fqName ?: element.name ?: "<anonymous>"
-        }
-        is KtObjectDeclaration -> {
-            val fqName = element.fqName?.asString()
-            fqName ?: element.name ?: "<anonymous>"
-        }
-        is KtParameter -> element.name ?: "<anonymous>"
-        is PsiPackage -> element.qualifiedName
-        else -> {
-            try {
-                val text = element.text
-                if (text != null) text.take(80) else "<unknown>"
-            } catch (_: Exception) {
-                "<unknown>"
-            }
+    private fun resolveQualifiedName(element: PsiElement): String {
+        // Delegate to the owning language adapter first (Kotlin/Java/Python/...).
+        LanguageAdapter.all(element.project)
+            .firstNotNullOfOrNull { it.qualifiedSignature(element) }
+            ?.let { return it }
+        // Fallback: plain text / name for elements no adapter recognizes.
+        return try {
+            val text = element.text
+            if (text != null) text.take(80) else "<unknown>"
+        } catch (_: Exception) {
+            "<unknown>"
         }
     }
 
-    private fun classifySymbolKind(element: PsiElement): SymbolKind = when (element) {
-        is PsiClass -> if (element.isEnum) SymbolKind.ENUM_ENTRY else SymbolKind.CLASS
-        is KtClass -> SymbolKind.CLASS
-        is KtObjectDeclaration -> SymbolKind.OBJECT
-        is PsiMethod, is KtNamedFunction -> SymbolKind.METHOD
-        is PsiField -> SymbolKind.FIELD
-        is KtProperty -> SymbolKind.PROPERTY
-        is PsiParameter, is KtParameter -> SymbolKind.PARAMETER
-        is PsiLocalVariable -> SymbolKind.VARIABLE
-        is PsiPackage -> SymbolKind.PACKAGE
-        else -> SymbolKind.VARIABLE
+    private fun classifySymbolKind(element: PsiElement): SymbolKind {
+        LanguageAdapter.all(element.project)
+            .firstNotNullOfOrNull { it.classifySymbol(element) }
+            ?.let { return it }
+        return SymbolKind.VARIABLE
     }
 
     private fun getLineNumber(element: PsiElement): Int {
