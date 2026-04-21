@@ -378,7 +378,8 @@ object ProjectAnalyzer {
         scope: GlobalSearchScope,
         adapters: List<LanguageAdapter>
     ): Collection<VirtualFile> {
-        val exts = adapters.flatMap { it.fileExtensions() }.toSet().ifEmpty { setOf("kt", "java") }
+        val exts = (adapters.flatMap { it.fileExtensions() } + listOf("kt", "kts", "java"))
+            .toSet()
         return exts.flatMap { FilenameIndex.getAllFilesByExt(project, it, scope) }
     }
 
