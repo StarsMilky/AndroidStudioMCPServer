@@ -1,0 +1,5 @@
+<idea-plugin>
+    <extensions defaultExtensionNs="com.codeintel.mcpserver">
+        <languageAdapter implementation="com.codeintel.mcpserver.lang.JavaLanguageAdapter"/>
+    </extensions>
+</idea-plugin>
