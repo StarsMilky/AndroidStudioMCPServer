@@ -37,6 +37,7 @@ object ReferenceSearcher {
             com.codeintel.mcpserver.models.args.FindReferencesMode.USAGES ->
                 "💡 Next: for any interesting usage, call resolve_symbol(file, line, column) to inspect its type."
             com.codeintel.mcpserver.models.args.FindReferencesMode.CALLERS,
+            @Suppress("DEPRECATION")
             com.codeintel.mcpserver.models.args.FindReferencesMode.CALL_HIERARCHY ->
                 "💡 Next: use analyze_data_flow(mode='BACKWARD') at a caller to trace where values originate."
             com.codeintel.mcpserver.models.args.FindReferencesMode.CALLEES ->
@@ -117,7 +118,8 @@ object ReferenceSearcher {
     ): ReferenceResult {
         return when (args.mode) {
             FindReferencesMode.USAGES -> searchUsages(project, target, args)
-            FindReferencesMode.CALLERS, FindReferencesMode.CALL_HIERARCHY ->
+            FindReferencesMode.CALLERS,
+            @Suppress("DEPRECATION") FindReferencesMode.CALL_HIERARCHY ->
                 searchCallHierarchy(project, target, args)
             FindReferencesMode.CALLEES -> searchCallees(project, target, args)
             FindReferencesMode.TYPE_HIERARCHY -> searchTypeHierarchy(project, target, args)
