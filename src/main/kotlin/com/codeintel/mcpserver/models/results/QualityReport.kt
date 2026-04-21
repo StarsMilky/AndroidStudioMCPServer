@@ -7,6 +7,7 @@ data class QualityReport(
     val issues: List<com.codeintel.mcpserver.models.results.QualityIssue>,
     val truncated: Boolean = false,
     val hint: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

@@ -55,7 +55,13 @@ object RuleChecker {
             }
 
             val passed = args.rules.size - violations.map { it.rule }.distinct().size
-            RuleCheckResult(passed = passed, failed = violations.map { it.rule }.distinct().size, violations = violations)
+            val failed = violations.map { it.rule }.distinct().size
+            val hint = if (failed == 0) {
+                "💡 All rules passed. Consider adding more rules to lock in architecture invariants."
+            } else {
+                "💡 Next: open each violation file, and refactor(operation='MOVE' or 'RENAME') to remove forbidden dependency."
+            }
+            RuleCheckResult(passed = passed, failed = failed, violations = violations, nextAction = hint)
         }
     }
 

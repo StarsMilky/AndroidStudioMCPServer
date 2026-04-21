@@ -2,8 +2,10 @@ package com.codeintel.mcpserver.services
 
 import com.codeintel.mcpserver.errors.McpErrorCode
 import com.codeintel.mcpserver.errors.ToolException
+import com.codeintel.mcpserver.models.args.FindSymbolArgs
 import com.codeintel.mcpserver.models.args.ResolveSymbolArgs
 import com.codeintel.mcpserver.models.args.SymbolKindFilter
+import com.codeintel.mcpserver.models.results.FindSymbolResult
 import com.codeintel.mcpserver.models.results.SymbolInfo
 import com.codeintel.mcpserver.models.results.SymbolKind
 import com.codeintel.mcpserver.util.ProjectUtils
@@ -36,49 +38,13 @@ import org.jetbrains.kotlin.psi.KtProperty
 object SymbolResolver {
 
     fun resolve(project: Project, args: ResolveSymbolArgs): SymbolInfo {
-        return if (args.name != null) {
-            resolveByName(project, args)
-        } else {
-            val file = args.file ?: throw ToolException(
-                McpErrorCode.PSI_ERROR,
-                mapOf("reason" to "Either 'name' or 'file'+'line'+'column' must be provided")
-            )
-            val line = args.line ?: throw ToolException(
-                McpErrorCode.PSI_ERROR,
-                mapOf("reason" to "'line' is required when using file-based resolution")
-            )
-            val column = args.column ?: throw ToolException(
-                McpErrorCode.PSI_ERROR,
-                mapOf("reason" to "'column' is required when using file-based resolution")
-            )
-            resolveByPosition(project, file, line, column)
-        }
+        val info = resolveByPosition(project, args.file, args.line, args.column)
+        val hint = "💡 Next: find_references(qualified_name='${info.qualifiedType}', mode='USAGES') to see where it's used."
+        return info.copy(nextAction = hint)
     }
 
-    fun resolveByPosition(project: Project, file: String, line: Int, column: Int): SymbolInfo {
-        return PsiUtils.readAction(project) {
-            val vf = ProjectUtils.findFile(project, file)
-            val psiFile = ProjectUtils.getPsiFile(project, vf)
-            val offset = ProjectUtils.lineColumnToOffset(psiFile, line, column)
-            val element = psiFile.findElementAt(offset)
-                ?: throw ToolException(
-                    McpErrorCode.SYMBOL_NOT_FOUND,
-                    mapOf("line" to line.toString(), "column" to column.toString())
-                )
-
-            val ref = element.parent?.reference ?: element.reference
-            val resolved = ref?.resolve()
-
-            if (resolved != null) {
-                buildSymbolInfo(project, resolved)
-            } else {
-                buildSymbolInfoFromElement(project, element)
-            }
-        }
-    }
-
-    private fun resolveByName(project: Project, args: ResolveSymbolArgs): SymbolInfo {
-        val name = args.name!!
+    fun findByName(project: Project, args: FindSymbolArgs): FindSymbolResult {
+        val name = args.name
         val kindFilter = args.kind ?: SymbolKindFilter.ALL
         val limit = args.limit.coerceIn(1, 50)
 
@@ -101,11 +67,39 @@ object SymbolResolver {
                 )
             }
 
-            val primary = results.first()
-            if (results.size == 1) {
-                primary
+            val nextAction = if (results.size == 1) {
+                val first = results.first()
+                "💡 Next: find_references(qualified_name='${first.qualifiedType}', mode='USAGES') to see where it's used."
             } else {
-                primary.copy(totalMatches = results.size)
+                "💡 ${results.size} matches. Use find_references with a qualified_name to narrow down."
+            }
+
+            FindSymbolResult(
+                matches = results.take(limit),
+                totalMatches = results.size,
+                nextAction = nextAction,
+            )
+        }
+    }
+
+    fun resolveByPosition(project: Project, file: String, line: Int, column: Int): SymbolInfo {
+        return PsiUtils.readAction(project) {
+            val vf = ProjectUtils.findFile(project, file)
+            val psiFile = ProjectUtils.getPsiFile(project, vf)
+            val offset = ProjectUtils.lineColumnToOffset(psiFile, line, column)
+            val element = psiFile.findElementAt(offset)
+                ?: throw ToolException(
+                    McpErrorCode.SYMBOL_NOT_FOUND,
+                    mapOf("line" to line.toString(), "column" to column.toString())
+                )
+
+            val ref = element.parent?.reference ?: element.reference
+            val resolved = ref?.resolve()
+
+            if (resolved != null) {
+                buildSymbolInfo(project, resolved)
+            } else {
+                buildSymbolInfoFromElement(project, element)
             }
         }
     }

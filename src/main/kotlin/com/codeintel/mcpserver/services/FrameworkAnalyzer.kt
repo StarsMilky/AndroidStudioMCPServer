@@ -50,7 +50,7 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 object FrameworkAnalyzer {
 
     fun analyze(project: Project, args: QueryFrameworkArgs): FrameworkViewResult {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             when (args.framework) {
                 FrameworkType.ROOM -> analyzeRoom(project, args.detailTarget)
                 FrameworkType.RETROFIT -> analyzeRetrofit(project, args.detailTarget)
@@ -59,6 +59,12 @@ object FrameworkAnalyzer {
                 FrameworkType.NAVIGATION -> analyzeNavigation(project, args.detailTarget)
             }
         }
+        val hint = if (args.detailTarget == null) {
+            "💡 Next: query_framework(framework='${args.framework.name}', detail_target='<name>') to drill into one entry, or find_symbol(name='...') on any listed class."
+        } else {
+            "💡 Next: find_references(qualified_name='${args.detailTarget}', mode='USAGES') to see where '${args.detailTarget}' is used."
+        }
+        return result.copy(nextAction = hint)
     }
 
     // ==================== ROOM ====================

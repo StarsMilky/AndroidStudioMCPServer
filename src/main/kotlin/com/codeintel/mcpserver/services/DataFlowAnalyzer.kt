@@ -32,7 +32,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 
 object DataFlowAnalyzer {
     fun analyze(project: Project, args: AnalyzeDataFlowArgs): DataFlowResult {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             val vf = ProjectUtils.findFile(project, args.file)
             val psiFile = ProjectUtils.getPsiFile(project, vf)
             val offset = ProjectUtils.lineColumnToOffset(psiFile, args.line, args.column)
@@ -46,6 +46,17 @@ object DataFlowAnalyzer {
                 DataFlowMode.EXTERNAL_ANNOTATIONS -> analyzeExternalAnnotations(project, element)
             }
         }
+        val hint = when (args.mode) {
+            DataFlowMode.NULLABILITY ->
+                "💡 Next: if nullable, find_references(mode='USAGES') on this symbol to see if any call site handles null."
+            DataFlowMode.FORWARD ->
+                "💡 Next: for any downstream consumer of interest, resolve_symbol(file,line,col) to learn its type."
+            DataFlowMode.BACKWARD ->
+                "💡 Next: pick a source and find_references(mode='CALLERS') to see which callers feed this value."
+            DataFlowMode.EXTERNAL_ANNOTATIONS ->
+                "💡 Next: use resolve_symbol(file,line,col) to confirm the annotated library method signature."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun analyzeNullability(

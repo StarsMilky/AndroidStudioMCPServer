@@ -49,7 +49,8 @@ object ScopeAnalyzer {
                 localVariables = applyFilter(locals, args.filter, "variable"),
                 thisMembers = applyFilter(members, args.filter, null),
                 extensionFunctions = applyFilter(extensions, args.filter, "method"),
-                importedSymbols = applyFilter(imported, args.filter, null)
+                importedSymbols = applyFilter(imported, args.filter, null),
+                nextAction = "💡 Next: resolve_symbol(file='${args.file}', line=<N>, column=<M>) on any symbol of interest to inspect its full type."
             )
         }
     }

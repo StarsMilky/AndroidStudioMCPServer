@@ -45,7 +45,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 object ProjectAnalyzer {
 
     fun analyze(project: Project, args: QueryProjectArgs): ProjectOverview {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             when (args.mode) {
                 QueryProjectMode.OVERVIEW -> analyzeOverview(project)
                 QueryProjectMode.DEPENDENCY -> analyzeDependency(project, args)
@@ -53,6 +53,17 @@ object ProjectAnalyzer {
                 QueryProjectMode.VARIANT -> analyzeVariant(project)
             }
         }
+        val hint = when (args.mode) {
+            QueryProjectMode.OVERVIEW ->
+                "💡 Next: query_framework(framework='ROOM/HILT/COMPOSE/...') to drill into a detected framework, or find_symbol(name='...') on any key class."
+            QueryProjectMode.DEPENDENCY ->
+                "💡 Next: for each affected class, find_references(qualified_name='...', mode='USAGES') to estimate blast radius."
+            QueryProjectMode.API_SURFACE ->
+                "💡 Next: find_references(qualified_name='...', mode='USAGES') on a public symbol to see external callers."
+            QueryProjectMode.VARIANT ->
+                "💡 Next: get_scope(file,line,col) in a source file to see which variant-specific symbols are visible."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun analyzeOverview(project: Project): ProjectOverview {

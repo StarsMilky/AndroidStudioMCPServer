@@ -34,11 +34,23 @@ import org.jetbrains.kotlin.psi.KtNamedFunction
 object ReferenceSearcher {
 
     fun search(project: Project, args: FindReferencesArgs): ReferenceResult {
-        return if (args.qualifiedName != null) {
+        val result = if (args.qualifiedName != null) {
             searchByQualifiedName(project, args)
         } else {
             searchByPosition(project, args)
         }
+        val hint = when (args.mode) {
+            com.codeintel.mcpserver.models.args.FindReferencesMode.USAGES ->
+                "💡 Next: for any interesting usage, call resolve_symbol(file, line, column) to inspect its type."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALLERS,
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALL_HIERARCHY ->
+                "💡 Next: use analyze_data_flow(mode='BACKWARD') at a caller to trace where values originate."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.CALLEES ->
+                "💡 Next: pick an interesting callee and resolve_symbol to inspect its declaration."
+            com.codeintel.mcpserver.models.args.FindReferencesMode.TYPE_HIERARCHY ->
+                "💡 Next: for any subtype, use find_references(mode='USAGES') to see where that subtype is instantiated."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun searchByPosition(project: Project, args: FindReferencesArgs): ReferenceResult {

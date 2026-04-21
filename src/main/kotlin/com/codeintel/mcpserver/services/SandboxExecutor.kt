@@ -23,11 +23,20 @@ import com.intellij.psi.util.PsiTreeUtil
 
 object SandboxExecutor {
     fun execute(project: Project, args: SandboxArgs): SandboxResult {
-        return when (args.operation) {
+        val result = when (args.operation) {
             SandboxOperation.DECOMPILE -> executeDecompile(project, args)
             SandboxOperation.CONVERT_J2K -> executeConvertJ2K(project, args)
             SandboxOperation.BATCH_FIX -> executeBatchFix(project, args)
         }
+        val hint = when (args.operation) {
+            SandboxOperation.DECOMPILE ->
+                "💡 Next: find_references(qualified_name='${args.qualifiedClassName ?: ""}', mode='USAGES') to see how your code uses this class."
+            SandboxOperation.CONVERT_J2K ->
+                "💡 Next: review converted Kotlin, then replace the original Java file manually."
+            SandboxOperation.BATCH_FIX ->
+                "💡 Next: re-run with dry_run=false to apply, or checkpoint(operation='DIFF', target_label='${result.checkpointLabel ?: ""}') to review."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun executeDecompile(project: Project, args: SandboxArgs): SandboxResult {

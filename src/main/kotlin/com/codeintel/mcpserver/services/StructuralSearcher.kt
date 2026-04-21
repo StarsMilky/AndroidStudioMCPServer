@@ -27,7 +27,7 @@ object StructuralSearcher {
     private val log = Logger.getInstance(StructuralSearcher::class.java)
 
     fun search(project: Project, args: StructuralSearchArgs): SearchMatchResult {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             val scope = resolveScope(project, args.scope)
 
             if (args.fileType.lowercase() == "xml") {
@@ -41,6 +41,12 @@ object StructuralSearcher {
                 searchWithCustomMatcher(project, args, scope)
             }
         }
+        val hint = if (result.total == 0) {
+            "💡 No matches. Try a broader SSR pattern or change file_type."
+        } else {
+            "💡 Next: resolve_symbol(file, line, column) on an interesting match to inspect the symbol."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun searchWithSsr(

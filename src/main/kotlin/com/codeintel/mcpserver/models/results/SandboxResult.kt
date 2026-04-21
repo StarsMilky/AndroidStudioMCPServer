@@ -11,6 +11,7 @@ data class SandboxResult(
     val problemsFixed: Int? = null,
     val unfixable: List<com.codeintel.mcpserver.models.results.UnfixableItem>? = null,
     val checkpointLabel: String? = null,
+    val nextAction: String? = null,
 )
 
 @Serializable

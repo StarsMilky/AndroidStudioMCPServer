@@ -9,6 +9,7 @@ data class ScopeResult(
     val extensionFunctions: List<com.codeintel.mcpserver.models.results.ScopeSymbol>,
     val importedSymbols: List<com.codeintel.mcpserver.models.results.ScopeSymbol>,
     val truncated: Boolean = false,
+    val nextAction: String? = null,
 )
 
 @Serializable

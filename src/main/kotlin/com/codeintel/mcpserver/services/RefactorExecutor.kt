@@ -34,13 +34,19 @@ object RefactorExecutor {
     fun execute(project: Project, args: RefactorArgs): RefactorResult {
         val checkpointLabel = CheckpointManager.createAutoCheckpoint(project, args.operation.name.lowercase())
 
-        return when (args.operation) {
+        val result = when (args.operation) {
             RefactorOperation.RENAME -> executeRename(project, args, checkpointLabel)
             RefactorOperation.MOVE -> executeMove(project, args, checkpointLabel)
             RefactorOperation.EXTRACT -> executeExtract(project, args, checkpointLabel)
             RefactorOperation.SAFE_DELETE -> executeSafeDelete(project, args, checkpointLabel)
             RefactorOperation.CHANGE_SIGNATURE -> executeChangeSignature(project, args, checkpointLabel)
         }
+        val hint = if (result.success) {
+            "💡 Next: checkpoint(operation='DIFF', file='${args.file}', target_label='$checkpointLabel') to review, or ROLLBACK to revert."
+        } else {
+            "💡 Next: inspect conflicts[] above; fix or call checkpoint(operation='ROLLBACK', label='$checkpointLabel') to revert."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun executeRename(project: Project, args: RefactorArgs, checkpointLabel: String): RefactorResult {

@@ -8,6 +8,7 @@ import com.codeintel.mcpserver.models.args.AnalyzeQualityArgs
 import com.codeintel.mcpserver.models.args.CheckpointArgs
 import com.codeintel.mcpserver.models.args.CheckRulesArgs
 import com.codeintel.mcpserver.models.args.FindReferencesArgs
+import com.codeintel.mcpserver.models.args.FindSymbolArgs
 import com.codeintel.mcpserver.models.args.GetScopeArgs
 import com.codeintel.mcpserver.models.args.QueryProjectArgs
 import com.codeintel.mcpserver.models.args.QueryProjectMode
@@ -18,6 +19,7 @@ import com.codeintel.mcpserver.models.args.SandboxArgs
 import com.codeintel.mcpserver.models.args.StructuralSearchArgs
 import com.codeintel.mcpserver.models.results.CheckpointResult
 import com.codeintel.mcpserver.models.results.DataFlowResult
+import com.codeintel.mcpserver.models.results.FindSymbolResult
 import com.codeintel.mcpserver.models.results.FrameworkViewResult
 import com.codeintel.mcpserver.models.results.ProjectOverview
 import com.codeintel.mcpserver.models.results.QualityReport
@@ -52,6 +54,7 @@ object ToolRegistrar {
 
     fun registerAll(server: Server) {
         registerResolveSymbol(server)
+        registerFindSymbol(server)
         registerFindReferences(server)
         registerGetScope(server)
         registerCheckpoint(server)
@@ -106,7 +109,19 @@ object ToolRegistrar {
     private fun registerResolveSymbol(server: Server) {
         server.addTool(
             name = "resolve_symbol",
-            description = "Resolve symbol by position (file+line+column) OR by name. Returns fully-qualified type, declaration location (file, line, column), and symbol kind. Use name-based lookup to avoid grep.",
+            description = """
+                Resolve the symbol at an exact code position (file+line+column). Returns its fully-qualified type, declaration location, and kind.
+
+                When to use:
+                 - You already have a cursor position and need to know what symbol/type is there
+                 - To verify a type before further analysis (e.g. "is UserId a class or typealias?")
+                 - Chaining from find_references results (which give you file+line+column)
+
+                Example: resolve_symbol(file="src/Main.kt", line=42, column=12)
+
+                Returns: qualifiedType, declarationFile, declarationLine, declarationColumn, kind.
+                For name-based lookup (when you only know the symbol name), use find_symbol instead.
+            """.trimIndent(),
             inputSchema = ToolSchemas.resolveSymbol
         ) { request ->
             handleTool(
@@ -121,10 +136,58 @@ object ToolRegistrar {
         }
     }
 
+    private fun registerFindSymbol(server: Server) {
+        server.addTool(
+            name = "find_symbol",
+            description = """
+                Find a symbol (class, method, field) by name. Returns matches with fully-qualified name, declaration file, line, and kind.
+
+                USE THIS INSTEAD OF grep/rg to locate code symbols — zero false positives (uses IDE index, not text search), works across Java/Kotlin.
+
+                When to use:
+                 - The user mentions a symbol by name (e.g. "show me UserRepository")
+                 - You need to locate a symbol before running find_references or analyze_data_flow
+                 - You want to disambiguate candidates before choosing one
+
+                Example: find_symbol(name="UserRepository", kind="CLASS")
+                Example: find_symbol(name="com.example.UserRepository.findById")
+
+                Returns: matches[] with {qualifiedName, declarationFile, declarationLine, kind}, totalMatches, nextAction.
+            """.trimIndent(),
+            inputSchema = ToolSchemas.findSymbol
+        ) { request ->
+            handleTool(
+                "find_symbol",
+                request.arguments,
+                FindSymbolArgs.serializer(),
+                FindSymbolResult.serializer(),
+                SizePolicy.RESOLVE_SYMBOL
+            ) { project, args ->
+                SymbolResolver.findByName(project, args)
+            }
+        }
+    }
+
     private fun registerFindReferences(server: Server) {
         server.addTool(
             name = "find_references",
-            description = "Semantic reference search by position (file+line+column) OR by qualified name. Supports usages, call hierarchy, callees, and type hierarchy (zero false positives).",
+            description = """
+                Find all usages, callers, callees, or type hierarchy of a symbol.
+
+                USE THIS INSTEAD OF grep/rg when searching for method calls, class usages, or override chains. Works across Java/Kotlin/XML in one call. Zero false positives.
+
+                When to use:
+                 - "Where is this method called?" → mode=CALLERS
+                 - "What does this method invoke?" → mode=CALLEES
+                 - "Who uses this class/field?" → mode=USAGES
+                 - "What subclasses this / what does it implement?" → mode=TYPE_HIERARCHY
+
+                Two entry modes: by position (file+line+column) OR by qualified_name (preferred when you already know the FQN).
+
+                Example: find_references(qualified_name="com.example.UserRepo.findById", mode="CALLERS", depth=3)
+
+                Returns: usages[] or callHierarchy or typeHierarchy. Paginated via offset/limit.
+            """.trimIndent(),
             inputSchema = ToolSchemas.findReferences
         ) { request ->
             handleTool(
@@ -142,7 +205,16 @@ object ToolRegistrar {
     private fun registerGetScope(server: Server) {
         server.addTool(
             name = "get_scope",
-            description = "List all visible symbols at a code position (locals, members, extensions, imports)",
+            description = """
+                List all symbols visible at a code position: locals, parameters, fields, extensions, imports.
+
+                When to use:
+                 - Before writing/inserting code at a cursor position, to know what's in scope
+                 - To check if a name is shadowed or already defined
+                 - To discover available extension functions
+
+                Example: get_scope(file="src/Main.kt", line=42, column=10, filter="ALL")
+            """.trimIndent(),
             inputSchema = ToolSchemas.getScope
         ) { request ->
             handleTool(
@@ -160,7 +232,16 @@ object ToolRegistrar {
     private fun registerCheckpoint(server: Server) {
         server.addTool(
             name = "checkpoint",
-            description = "Local History operations: create checkpoint, view history, rollback, diff",
+            description = """
+                Save / list / rollback / diff local snapshots of the project.
+
+                When to use:
+                 - ALWAYS call with operation=CREATE before any multi-file refactor or risky change
+                 - Use DIFF to review what changed since a checkpoint
+                 - Use ROLLBACK to revert when a refactor went wrong
+
+                Example: checkpoint(operation="CREATE", label="before-big-refactor")
+            """.trimIndent(),
             inputSchema = ToolSchemas.checkpoint
         ) { request ->
             handleTool(
@@ -184,7 +265,22 @@ object ToolRegistrar {
     private fun registerRefactor(server: Server) {
         server.addTool(
             name = "refactor",
-            description = "Semantic-safe refactoring (rename/move/extract/safe_delete/change_signature) across Java/Kotlin/XML/Manifest",
+            description = """
+                Safe rename / move / extract / safe-delete / change-signature across Java+Kotlin+XML+Manifest.
+
+                NEVER use sed or text-replace for renaming code — this handles all references, imports, and override chains automatically.
+
+                When to use:
+                 - User says "rename X to Y" → operation=RENAME
+                 - User says "move this class to package P" → operation=MOVE
+                 - User says "extract these lines into a function" → operation=EXTRACT
+                 - User says "delete this unused thing" → operation=SAFE_DELETE (checks references first)
+                 - User says "add/change a parameter" → operation=CHANGE_SIGNATURE
+
+                Example: refactor(operation="RENAME", file="Foo.kt", line=5, column=7, new_name="Bar")
+
+                Tip: run checkpoint(CREATE) before any multi-file refactor.
+            """.trimIndent(),
             inputSchema = ToolSchemas.refactor
         ) { request ->
             handleTool(
@@ -202,7 +298,18 @@ object ToolRegistrar {
     private fun registerQueryProject(server: Server) {
         server.addTool(
             name = "query_project",
-            description = "Project overview, dependency graph, change impact analysis, API surface, build variants",
+            description = """
+                ⭐ START HERE when entering an unfamiliar project. Returns project architecture: modules, key classes, detected frameworks, build variants.
+
+                When to use:
+                 - First action on any new project ("where do I start?") → mode=OVERVIEW
+                 - Before large refactors, to see transitive dependency impact → mode=DEPENDENCY
+                 - To map the public API surface of a module → mode=API_SURFACE
+                 - To inspect active build variants / flavors → mode=VARIANT
+
+                Example: query_project(mode="OVERVIEW")
+                Example: query_project(mode="DEPENDENCY", target_class="com.example.UserRepo", change_type="SIGNATURE_CHANGE")
+            """.trimIndent(),
             inputSchema = ToolSchemas.queryProject
         ) { request ->
             val toolName = "query_project"
@@ -249,7 +356,20 @@ object ToolRegistrar {
     private fun registerQueryFramework(server: Server) {
         server.addTool(
             name = "query_framework",
-            description = "Annotation-based structural views for Room/Retrofit/Hilt/Compose/Navigation",
+            description = """
+                Deep-dive into framework-specific structure: Room entities/DAOs, Retrofit APIs, Hilt bindings, Compose composables, Navigation graphs.
+
+                When to use:
+                 - User asks about DB schema or queries → framework=ROOM
+                 - User asks about API endpoints → framework=RETROFIT
+                 - User asks about DI / module bindings → framework=HILT
+                 - User asks about UI screens or composables → framework=COMPOSE
+                 - User asks about navigation flow → framework=NAVIGATION
+
+                Use detail_target to drill into a specific entity/interface by name.
+
+                Example: query_framework(framework="ROOM", detail_target="UserEntity")
+            """.trimIndent(),
             inputSchema = ToolSchemas.queryFramework
         ) { request ->
             val toolName = "query_framework"
@@ -296,7 +416,17 @@ object ToolRegistrar {
     private fun registerAnalyzeDataFlow(server: Server) {
         server.addTool(
             name = "analyze_data_flow",
-            description = "Data flow analysis: nullability inference, value propagation tracing, external annotations",
+            description = """
+                Track how a value flows or whether it can be null. Replaces manual code tracing.
+
+                When to use:
+                 - "Can this expression be null at this point?" → mode=NULLABILITY
+                 - "Where does this value come from?" → mode=BACKWARD
+                 - "Where does this value propagate to?" → mode=FORWARD
+                 - "What nullability annotations apply here?" → mode=EXTERNAL_ANNOTATIONS
+
+                Example: analyze_data_flow(file="Foo.kt", line=10, column=5, mode="NULLABILITY")
+            """.trimIndent(),
             inputSchema = ToolSchemas.analyzeDataFlow
         ) { request ->
             handleTool(
@@ -314,7 +444,15 @@ object ToolRegistrar {
     private fun registerCheckRules(server: Server) {
         server.addTool(
             name = "check_rules",
-            description = "Validate code against custom architecture rules (layer violations, illegal dependencies)",
+            description = """
+                Validate architecture rules against the codebase (e.g. "UI must not depend on DB layer"). Returns a list of violations with file:line.
+
+                When to use:
+                 - To enforce layering/module boundaries during code review
+                 - To detect forbidden cross-package dependencies
+
+                Example: check_rules(rules=[{name:"no-ui-to-db", source:"com.app.ui", must_not_depend_on:["com.app.db"]}])
+            """.trimIndent(),
             inputSchema = ToolSchemas.checkRules
         ) { request ->
             handleTool(
@@ -332,7 +470,18 @@ object ToolRegistrar {
     private fun registerStructuralSearch(server: Server) {
         server.addTool(
             name = "structural_search",
-            description = "AST-based code pattern search using IntelliJ SSR syntax, beyond text search",
+            description = """
+                AST-pattern search using IntelliJ SSR (Structural Search & Replace).
+
+                USE THIS INSTEAD OF grep for code patterns (e.g. "all @Composable functions", "all synchronized blocks", "new Thread() calls"). Grep matches text; this matches syntax trees — zero false positives.
+
+                When to use:
+                 - Finding anti-patterns across the codebase
+                 - Locating uses of a specific construct (annotations, try/catch shapes, lambda patterns)
+
+                Example: structural_search(pattern="Thread().start()", file_type="kotlin")
+                Example: structural_search(pattern="@Composable fun ${'$'}X${'$'}", file_type="kotlin")
+            """.trimIndent(),
             inputSchema = ToolSchemas.structuralSearch
         ) { request ->
             handleTool(
@@ -350,7 +499,14 @@ object ToolRegistrar {
     private fun registerAnalyzeQuality(server: Server) {
         server.addTool(
             name = "analyze_quality",
-            description = "Code quality analysis: complexity hotspots, dead code, clones, patterns, error handling",
+            description = """
+                Find code quality hotspots: complexity, dead code, duplicates, pattern violations, bad error handling. Use for audits and code reviews.
+
+                Modes: COMPLEXITY (cyclomatic hotspots), DEAD_CODE (unused symbols), CLONES (copy-pasted code), PATTERNS (anti-patterns), ERROR_HANDLING (empty catch blocks, swallowed exceptions).
+
+                Example: analyze_quality(mode="COMPLEXITY", top_n=10)
+                Example: analyze_quality(mode="DEAD_CODE", scope="module:app")
+            """.trimIndent(),
             inputSchema = ToolSchemas.analyzeQuality
         ) { request ->
             handleTool(
@@ -368,7 +524,18 @@ object ToolRegistrar {
     private fun registerSandbox(server: Server) {
         server.addTool(
             name = "sandbox",
-            description = "Sandbox: decompile library source, Java-to-Kotlin conversion, batch inspections",
+            description = """
+                Advanced operations: decompile library classes (read 3rd-party source), Java→Kotlin conversion, batch IDE inspections with auto-fix.
+
+                When to use:
+                 - User wants to see source of a compiled dependency → DECOMPILE
+                 - Converting a legacy Java file to Kotlin → CONVERT_J2K
+                 - Applying IDE inspections at scale (try dry_run=true first) → BATCH_FIX
+
+                Example: sandbox(operation="DECOMPILE", qualified_class_name="java.util.HashMap")
+
+                Note: JVM-only.
+            """.trimIndent(),
             inputSchema = ToolSchemas.sandbox
         ) { request ->
             handleTool(

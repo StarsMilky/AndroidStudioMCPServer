@@ -26,7 +26,7 @@ import org.jetbrains.kotlin.psi.KtTryExpression
 
 object QualityAnalyzer {
     fun analyze(project: Project, args: AnalyzeQualityArgs): QualityReport {
-        return PsiUtils.smartReadAction(project) {
+        val result = PsiUtils.smartReadAction(project) {
             when (args.mode) {
                 QualityMode.COMPLEXITY -> analyzeComplexity(project, args)
                 QualityMode.DEAD_CODE -> analyzeDeadCode(project, args)
@@ -35,6 +35,19 @@ object QualityAnalyzer {
                 QualityMode.ERROR_HANDLING -> analyzeErrorHandling(project, args)
             }
         }
+        val hint = when (args.mode) {
+            QualityMode.COMPLEXITY ->
+                "💡 Next: pick the hottest method and find_references(mode='CALLERS') to decide safe refactor scope."
+            QualityMode.DEAD_CODE ->
+                "💡 Next: for each unused symbol, find_references(mode='USAGES') to double-check, then refactor(operation='SAFE_DELETE')."
+            QualityMode.CLONES ->
+                "💡 Next: use refactor(operation='EXTRACT') on one duplicate to consolidate into a shared function."
+            QualityMode.PATTERNS ->
+                "💡 Next: use structural_search to locate every instance of a specific anti-pattern."
+            QualityMode.ERROR_HANDLING ->
+                "💡 Next: inspect each empty catch with resolve_symbol to decide whether to rethrow, log, or handle."
+        }
+        return result.copy(nextAction = hint)
     }
 
     private fun analyzeComplexity(project: Project, args: AnalyzeQualityArgs): QualityReport {
